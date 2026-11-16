@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="it" data-theme="light">
+<head>
+<meta charset="utf-8">
+<style>/*BUNDLE_CSS*/</style>
+<style>/*TOKENS_CSS*/</style>
+<style>/*SLIDES_CSS*/</style>
+<style>
+  /* App chrome, built on the Protocolli & Reti tokens: square corners, hairlines, no shadows. */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--background); color: var(--foreground);
+    font: 14px/1.4 var(--font-sans); -webkit-user-select: none; -webkit-font-smoothing: antialiased; }
+  body { display: flex; flex-direction: column; }
+  header { padding: 14px 20px 10px; border-bottom: var(--stroke-hairline) solid var(--border); background: var(--card); }
+  .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  #title { flex: 1; min-width: 180px; font: 600 20px var(--font-sans); letter-spacing: -0.01em; border: none; background: transparent;
+    color: var(--foreground); outline: none; padding: 4px 0; }
+  #title::placeholder { color: var(--muted-foreground); }
+  button { font: 600 13px/18px var(--font-sans); border: var(--stroke-hairline) solid var(--border); background: transparent; color: var(--foreground);
+    padding: 7px 14px; border-radius: 0; cursor: pointer; }
+  button:hover:not(:disabled) { background: var(--muted); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.rec { background: var(--destructive); color: var(--destructive-foreground); border-color: var(--destructive); padding: 8px 18px; }
+  button.rec:hover:not(:disabled) { background: var(--destructive); filter: brightness(1.06); }
+  button.go { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  button.go:hover:not(:disabled) { background: var(--primary); filter: brightness(1.05); }
+  kbd { font: 500 11px var(--font-mono); opacity: .65; margin-left: 6px; }
+  .dot { width: 9px; height: 9px; border-radius: var(--radius-dot); background: currentColor; display: inline-block; margin-right: 7px; vertical-align: 1px; }
+  #timer { font: 600 18px var(--font-mono); min-width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
+  #meter { width: 90px; height: 6px; background: var(--muted); overflow: hidden; }
+  #meter > div { height: 100%; width: 0; background: var(--success); transition: width .08s linear; }
+  .settings { margin-top: 10px; gap: 14px; color: var(--muted-foreground); font-size: 12.5px; }
+  .settings label { display: flex; align-items: center; gap: 6px; }
+  select, input.field-in { font: 500 12.5px var(--font-sans); color: var(--foreground); background: var(--card); border: var(--stroke-hairline) solid var(--border);
+    border-radius: 0; padding: 4px 6px; max-width: 290px; outline: none; }
+  select:focus, input.field-in:focus { border-color: var(--diagram-link); }
+  #status { font-size: 12.5px; color: var(--muted-foreground); }
+  #status.rec { color: var(--destructive); font-weight: 600; }
+  #status.paused { color: var(--warning); font-weight: 600; }
+
+  #split { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left, 44%) 6px 1fr; }
+  #left { position: relative; min-width: 0; min-height: 0; display: flex; }
+  #scroller { flex: 1; overflow-y: auto; -webkit-user-select: text; }
+  #doc { max-width: 820px; margin: 0 auto; padding: 24px 24px 120px; font-size: var(--fs, 17px); line-height: 1.65; }
+  .seg { display: grid; grid-template-columns: 66px 1fr; gap: 12px; margin: 0 0 .55em; }
+  .ts { font: 12px var(--font-mono); color: var(--muted-foreground); padding-top: .45em; text-align: right; cursor: default; }
+  .seg .txt { white-space: pre-wrap; }
+  .seg.fresh .txt { animation: fade .5s ease; }
+  .seg.flash .txt { animation: flash 1.6s ease; }
+  @keyframes fade { from { background: var(--success-subtle); } to { background: transparent; } }
+  @keyframes flash { 0%, 60% { background: var(--accent); } to { background: transparent; } }
+  #partial .txt { color: var(--muted-foreground); font-style: italic; }
+  #partial .ts .dot { color: var(--destructive); animation: pulse 1.2s infinite; margin: 0; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .empty { color: var(--muted-foreground); text-align: center; margin-top: 120px; font-size: 15px; line-height: 1.6; }
+  .empty b { color: var(--foreground); }
+  #jump { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: none;
+    background: var(--foreground); color: var(--background); border: none; padding: 6px 16px; }
+  #divider { cursor: col-resize; background: var(--background); border-left: var(--stroke-hairline) solid var(--border); }
+  #divider:hover, #divider.drag { background: var(--accent); }
+
+  #right { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--background); }
+  .sp-bar { padding: 10px 16px; border-bottom: var(--stroke-hairline) solid var(--border); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .sp-bar .eyebrow { margin: 0 4px 0 0; font-size: 12px; color: var(--muted-foreground); text-transform: uppercase; }
+  #course { width: 150px; }
+  .sp-status { padding: 6px 16px 0; font: 12px/18px var(--font-mono); color: var(--muted-foreground); min-height: 24px; display: flex; gap: 14px; flex-wrap: wrap; }
+  .sp-status .new { color: var(--foreground); }
+  .sp-status .err { color: var(--destructive); }
+  .prog { height: var(--stroke-strong); overflow: hidden; }
+  .prog i { display: block; height: 100%; width: 30%; background: var(--primary); transform: translateX(-100%); }
+  .busy .prog i { animation: run 1.3s linear infinite; }
+  @keyframes run { to { transform: translateX(340%); } }
+  #slideList { flex: 1; overflow-y: auto; padding: 12px 16px 80px; display: grid; gap: 22px; align-content: start; }
+  .si .fr { width: 100%; aspect-ratio: 16 / 9; position: relative; overflow: hidden; outline: var(--stroke-hairline) solid var(--border); }
+  .si .fr > .pr-slide { position: absolute; top: 0; left: 0; transform-origin: 0 0; transform: scale(var(--k, .4)); }
+  .si.fresh .fr { outline: var(--stroke-strong) solid var(--primary); }
+  .si-meta { display: flex; gap: 12px; margin-top: 6px; font: 12px var(--font-mono); color: var(--muted-foreground); }
+  .si-meta a { color: var(--diagram-link); cursor: pointer; text-decoration: none; }
+  .si-meta a:hover { text-decoration: underline; }
+  .si-notes { margin: 4px 0 0; font-size: 13px; line-height: 19px; color: var(--muted-foreground); -webkit-user-select: text; }
+  #glossView { flex: 1; overflow-y: auto; padding: 16px 16px 80px; }
+  #glossView h3 { margin: 0 0 6px; font: 600 12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+  #glossView .hint { margin: 0 0 18px; font-size: 13px; line-height: 19px; color: var(--muted-foreground); max-width: 560px; }
+  .g-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr) 28px; align-items: center; gap: 8px; padding: 7px 0; border-top: var(--stroke-hairline) solid var(--border); font: 14px var(--font-mono); }
+  .g-row:last-of-type { border-bottom: var(--stroke-hairline) solid var(--border); }
+  .g-row .h { color: var(--muted-foreground); text-decoration: line-through; text-decoration-color: var(--destructive); overflow-wrap: anywhere; }
+  .g-row .a { color: var(--diagram-link); text-align: center; }
+  .g-row .c { font-weight: 600; overflow-wrap: anywhere; }
+  .g-x { border: none; padding: 2px 6px; color: var(--muted-foreground); font-size: 16px; line-height: 16px; }
+  .g-x:hover:not(:disabled) { color: var(--destructive); background: transparent; }
+  .g-terms { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }
+  .g-term { display: inline-flex; align-items: center; gap: 2px; font: 13px var(--font-mono); background: var(--secondary); color: var(--secondary-foreground); padding: 3px 4px 3px 10px; }
+  .g-sec { margin-bottom: 26px; }
+  #glossBtn.on, #matBtn.on { background: var(--accent); color: var(--accent-foreground); }
+  .m-row { grid-template-columns: minmax(0, 1fr) auto 28px; font-size: 13.5px; }
+  .m-row .pg { color: var(--muted-foreground); }
+  #matAdd { margin-top: 12px; }
+  .sp-empty { color: var(--muted-foreground); font-size: 14px; line-height: 1.6; padding: 40px 8px; max-width: 460px; }
+  .sp-empty b { color: var(--foreground); }
+
+  footer { border-top: var(--stroke-hairline) solid var(--border); background: var(--card); padding: 8px 20px; font-size: 12.5px; color: var(--muted-foreground); }
+  footer button { padding: 4px 10px; font-size: 12.5px; }
+  #saved a { color: var(--foreground); cursor: pointer; text-decoration: underline; }
+  #toast { position: fixed; top: 14px; right: 14px; max-width: 380px; display: flex; flex-direction: column; gap: 8px; z-index: 9; }
+  .toast { background: var(--card); border: var(--stroke-hairline) solid var(--border); border-left: var(--stroke-strong) solid var(--success); padding: 9px 12px; font-size: 13px; }
+  .toast.err { border-left-color: var(--destructive); }
+  .spacer { flex: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <input id="title" placeholder="Lecture title (e.g. Protocolli e reti – DHCP)" spellcheck="false">
+    <div id="meter" title="Microphone level"><div></div></div>
+    <div id="timer">00:00:00</div>
+    <button id="startBtn" class="rec" disabled><span class="dot"></span>Start</button>
+    <button id="pauseBtn" style="display:none">Pause</button>
+    <button id="stopBtn" style="display:none">Stop</button>
+  </div>
+  <div class="row settings">
+    <label>Model <select id="model"></select></label>
+    <label id="langWrap" style="display:none">Language <select id="lang"></select></label>
+    <label>Mic <select id="device"></select></label>
+    <label><input type="checkbox" id="saveAudio" checked> Also save audio</label>
+    <span class="spacer"></span>
+    <span id="status">Starting…</span>
+  </div>
+</header>
+
+<div id="split">
+  <div id="left">
+    <main id="scroller">
+      <div id="doc">
+        <div class="empty" id="empty">
+          Press <b>Start</b> when the lecture begins.<br>
+          Everything is transcribed on this Mac with Parakeet.<br>
+          It saves itself as you go to <b id="outDir">Documents/Lecture Transcripts</b>.
+        </div>
+        <div id="segs"></div>
+        <div class="seg" id="partial" style="display:none"><div class="ts"><span class="dot"></span></div><div class="txt"></div></div>
+      </div>
+    </main>
+    <button id="jump">↓ Jump to live</button>
+  </div>
+  <div id="divider" title="Drag to resize"></div>
+  <aside id="right">
+    <div class="sp-bar">
+      <p class="eyebrow">Slide</p>
+      <input id="course" class="field-in" placeholder="Course" title="Course name: helps DeepSeek fix misheard terms and goes in the slide footer" spellcheck="false">
+      <span class="spacer"></span>
+      <button id="matBtn" title="Course PDFs that DeepSeek searches to spell terms right and point you to pages">PDFs</button>
+      <button id="glossBtn" title="Words DeepSeek taught the transcriber for this course">Glossary</button>
+      <button id="rebuildBtn" title="Make the whole deck again from the full lecture, at higher reasoning effort (Undo last brings the old one back)">Rebuild deck</button>
+      <button id="undoBtn" title="Remove the slides from the last click">Undo last</button>
+      <button id="presentBtn" title="Open the deck in the browser to present or print">Present</button>
+      <button id="slidesBtn" class="go" disabled>Make slides<kbd>⇧⌘↩</kbd></button>
+    </div>
+    <div class="sp-status" id="spStatus"></div>
+    <div class="prog"><i></i></div>
+    <div id="slideList"></div>
+    <div id="glossView" style="display:none"></div>
+  </aside>
+</div>
+
+<footer class="row">
+  <span id="words">0 words</span>
+  <span id="saved"></span>
+  <span class="spacer"></span>
+  <select id="recent" title="Open a past lecture"><option value="">Open a past lecture…</option></select>
+  <button id="smaller" title="Smaller text">A−</button>
+  <button id="bigger" title="Larger text">A+</button>
+  <button id="copyBtn">Copy all</button>
+  <button id="folderBtn">Open folder</button>
+</footer>
+<div id="toast"></div>
+
+<script>/*SLIDES_JS*/</script>
+<script>
+const $ = (id) => document.getElementById(id);
+const send = (cmd, extra = {}) => window.ipc.postMessage(JSON.stringify({ cmd, ...extra }));
+const LANGS = { auto: "Auto-detect", it: "Italian", en: "English", fr: "French", de: "German", es: "Spanish",
+  pt: "Portuguese", nl: "Dutch", pl: "Polish", ro: "Romanian", ru: "Russian", uk: "Ukrainian", sv: "Swedish",
+  da: "Danish", fi: "Finnish", el: "Greek", cs: "Czech", sk: "Slovak", sl: "Slovenian", hr: "Croatian",
+  bg: "Bulgarian", hu: "Hungarian", et: "Estonian", lv: "Latvian", lt: "Lithuanian", mt: "Maltese" };
+
+let models = [], settings = {}, state = "idle", modelReady = false, loadedModel = null;
+let elapsed = 0, runStart = null, segs = [], follow = true, fontSize = 17, leftPct = 44;
+let curPath = null, deck = null, slidesBusy = false, slidesErr = "", renderedCount = -1;
+let gloss = { corrections: [], terms: [] }, glossOpen = false, mat = [], matBusy = false;
+
+for (const [k, v] of Object.entries(LANGS)) $("lang").add(new Option(v, k));
+
+function fmt(t) { t = Math.floor(t); return [t / 3600, (t / 60) % 60, t % 60].map(x => String(Math.floor(x)).padStart(2, "0")).join(":"); }
+function secs(hms) { return (hms || "").split(":").reduce((a, x) => a * 60 + (+x || 0), 0); }
+function curModel() { return models.find(m => m.path === $("model").value); }
+function persist() {
+  settings = { model: $("model").value, device: $("device").value, language: $("lang").value,
+    saveAudio: $("saveAudio").checked, fontSize, course: $("course").value, leftPct };
+  send("saveSettings", { settings });
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[c]);
+function toast(msg, err) {
+  const d = document.createElement("div"); d.className = "toast" + (err ? " err" : ""); d.textContent = msg;
+  $("toast").appendChild(d); setTimeout(() => d.remove(), err ? 9000 : 5000);
+}
+function applyFont() { $("doc").style.setProperty("--fs", fontSize + "px"); }
+function applySplit() { $("split").style.setProperty("--left", leftPct + "%"); fitSlides(); }
+
+function render() {
+  const rec = state === "recording", paused = state === "paused", busy = rec || paused;
+  $("startBtn").style.display = busy ? "none" : "";
+  $("pauseBtn").style.display = busy ? "" : "none";
+  $("stopBtn").style.display = busy ? "" : "none";
+  $("pauseBtn").textContent = paused ? "Resume" : "Pause";
+  $("startBtn").disabled = !modelReady || !curModel();
+  for (const id of ["model", "lang", "device", "saveAudio", "title", "recent"]) $(id).disabled = busy;
+  $("langWrap").style.display = curModel()?.langs === "multi" ? "" : "none";
+  const st = $("status");
+  st.className = rec ? "rec" : paused ? "paused" : "";
+  if (rec) st.innerHTML = '<span class="dot"></span>Recording' + (window.device ? " · " + window.device : "");
+  else if (paused) st.textContent = "Paused";
+  else if (!models.length) st.textContent = "No Parakeet model found";
+  else st.textContent = modelReady ? "Ready" : "Loading model…";
+  if (!busy) $("meter").firstChild.style.width = "0";
+  renderSlidesBar();
+}
+
+/* ---------- transcript ---------- */
+function wordCount() { return segs.reduce((n, s) => n + s.text.split(/\s+/).filter(Boolean).length, 0); }
+function nearBottom() { const s = $("scroller"); return s.scrollHeight - s.scrollTop - s.clientHeight < 80; }
+function scrollLive() { const s = $("scroller"); s.scrollTop = s.scrollHeight; }
+$("scroller").addEventListener("scroll", () => { follow = nearBottom(); $("jump").style.display = follow || state === "idle" ? "none" : "block"; });
+$("jump").onclick = () => { follow = true; scrollLive(); $("jump").style.display = "none"; };
+
+function addSeg(t, text, quiet) {
+  segs.push({ t, text });
+  $("empty").style.display = "none";
+  const el = document.createElement("div"); el.className = "seg" + (quiet ? "" : " fresh"); el.dataset.t = t;
+  el.innerHTML = '<div class="ts"></div><div class="txt"></div>';
+  el.firstChild.textContent = fmt(t); el.lastChild.textContent = text;
+  $("segs").appendChild(el); if (!quiet) setTimeout(() => el.classList.remove("fresh"), 600);
+  $("words").textContent = wordCount().toLocaleString() + " words";
+}
+function clearTranscript() { segs = []; $("segs").innerHTML = ""; $("words").textContent = "0 words"; $("partial").style.display = "none"; }
+function goToTime(hms) {
+  const t = secs(hms);
+  const els = [...document.querySelectorAll("#segs .seg")];
+  const el = els.find((e) => +e.dataset.t >= t) || els[els.length - 1];
+  if (!el) return;
+  follow = false;
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+}
+
+/* ---------- slides ---------- */
+function setCurPath(p) {
+  if (p === curPath) return;
+  curPath = p; deck = null; slidesErr = ""; renderedCount = -1;
+  renderSlides();
+  if (p) send("slidesState", { path: p });
+}
+function pending() { return deck ? Math.max(segs.length, deck.lines || 0) - (deck.done || 0) : segs.length; }
+
+function renderSlidesBar() {
+  const p = pending(), n = deck?.slides?.length || 0;
+  $("slidesBtn").disabled = !curPath || slidesBusy || p <= 0;
+  $("undoBtn").disabled = !curPath || slidesBusy || !n;
+  $("rebuildBtn").disabled = !curPath || slidesBusy || Math.max(segs.length, deck?.lines || 0) === 0;
+  $("presentBtn").disabled = !n;
+  document.body.classList.toggle("busy", slidesBusy);
+  const s = $("spStatus");
+  if (slidesBusy) s.innerHTML = rebuilding ? `<span class="new">DeepSeek is rebuilding the whole deck (high effort, about a minute)…</span>` : `<span class="new">DeepSeek is making slides from ${p} new ${p === 1 ? "line" : "lines"}…</span>`;
+  else if (slidesErr) { s.innerHTML = '<span class="err"></span>'; s.firstChild.textContent = slidesErr; }
+  else if (!curPath) s.innerHTML = "";
+  else s.innerHTML = (p > 0 ? `<span class="new">${p} new ${p === 1 ? "line" : "lines"} since last time</span>` : `<span>Up to date${deck?.lastT ? " · " + deck.lastT : ""}</span>`) +
+    `<span>${n} ${n === 1 ? "slide" : "slides"}</span>` + usageText();
+}
+
+function usageText() {
+  const u = deck?.usage; if (!u) return "";
+  const f = deck.flagged ? `<span title="Commands, addresses or numbers not found in the transcript are marked (?)">${deck.flagged} marked (?)</span>` : "";
+  const L = deck.lookups || [];
+  const lk = L.length ? `<span title="${esc(L.join(" · "))}">looked up ${L.length}× in PDFs</span>` : "";
+  return lk + `<span title="Last request: ${u.prompt} input tokens (${u.cached} from cache), ${u.output} output tokens">last: ${Math.round(u.cacheRate * 100)}% cached · ≈ $${u.cost.toFixed(4)}</span>` + f;
+}
+function renderSlides(freshFrom) {
+  const list = $("slideList"), slides = deck?.slides || [];
+  if (!slides.length) {
+    list.innerHTML = curPath
+      ? `<div class="sp-empty">No slides yet.<br>Press <b>Make slides</b> whenever you like: DeepSeek turns everything transcribed since the last time into slides in the Protocolli &amp; Reti style.</div>`
+      : `<div class="sp-empty">Slides for the lecture you're recording appear here.<br>You can also open a past lecture from the menu at the bottom.</div>`;
+    renderedCount = 0; renderSlidesBar(); return;
+  }
+  const foot = [$("course").value.trim(), deck.title].filter(Boolean).join(" · ");
+  list.innerHTML = slides.map((s, i) =>
+    `<div class="si${freshFrom != null && i >= freshFrom ? " fresh" : ""}" id="si${i}"><div class="fr">${renderSlide(s, i + 1, slides.length, foot)}</div>` +
+    `<div class="si-meta">${s.from ? `<a data-t="${s.from}" title="Show this part of the transcript">${s.from}${s.to ? " – " + s.to : ""}</a>` : ""}</div>` +
+    (s.notes ? `<p class="si-notes"></p>` : "") + `</div>`).join("");
+  slides.forEach((s, i) => { const p = list.querySelector(`#si${i} .si-notes`); if (p) p.textContent = s.notes; });
+  renderedCount = slides.length;
+  fitSlides();
+  fitSlideText(list);
+  if (freshFrom != null) {
+    const el = $("si" + freshFrom); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(() => list.querySelectorAll(".si.fresh").forEach((e) => e.classList.remove("fresh")), 4000);
+  }
+  renderSlidesBar();
+}
+function fitSlides() {
+  const fr = document.querySelector(".si .fr");
+  if (fr) $("slideList").style.setProperty("--k", fr.clientWidth / 1280);
+}
+new ResizeObserver(fitSlides).observe($("slideList"));
+$("slideList").addEventListener("click", (e) => { const a = e.target.closest("a[data-t]"); if (a) goToTime(a.dataset.t); });
+
+let rebuilding = false;
+function makeSlides(rebuild) {
+  if ((rebuild ? $("rebuildBtn") : $("slidesBtn")).disabled) return;
+  rebuilding = !!rebuild; slidesBusy = true; slidesErr = ""; persist(); renderSlidesBar();
+  send("slides", { path: curPath, course: $("course").value, rebuild: !!rebuild });
+}
+$("rebuildBtn").onclick = () => { if (!deck?.slides?.length || confirm("Make the whole deck again from the full lecture? Undo last brings the current one back.")) makeSlides(true); };
+$("slidesBtn").onclick = () => makeSlides(false);
+$("undoBtn").onclick = () => { if (confirm("Remove the slides from the last click?")) send("slidesUndo", { path: curPath }); };
+$("presentBtn").onclick = () => deck?.html && send("open", { path: deck.html });
+$("course").onchange = () => { persist(); renderedCount = -1; renderSlides(); loadGloss(); };
+
+/* glossary */
+function loadGloss() { send("glossary", { course: $("course").value }); send("material", { course: $("course").value }); }
+function renderGloss() {
+  const n = gloss.corrections.length;
+  $("glossBtn").textContent = "Glossary" + (n ? ` · ${n}` : "");
+  $("glossBtn").classList.toggle("on", glossOpen);
+  $("matBtn").textContent = "PDFs" + (mat.length ? ` · ${mat.length}` : "");
+  $("matBtn").classList.toggle("on", glossOpen);
+  $("glossView").style.display = glossOpen ? "" : "none";
+  $("slideList").style.display = glossOpen ? "none" : "";
+  if (!glossOpen) return;
+  const v = $("glossView"), course = $("course").value.trim() || "this course";
+  v.innerHTML =
+    `<div class="g-sec"><h3>Course material · ${mat.length}</h3><p class="hint" id="matHint"></p>` +
+    mat.map((f, i) => `<div class="g-row m-row"><span class="c"></span><span class="pg">${f.pages} pages${f.emptyPages ? ` (${f.emptyPages} without text)` : ""}</span><button class="g-x" data-k="material" data-i="${i}" title="Remove">×</button></div>`).join("") +
+    `<button id="matAdd" ${matBusy ? "disabled" : ""}>${matBusy ? "Reading PDF…" : "Add PDF…"}</button></div>` +
+    `<div class="g-sec"><h3>Corrections · ${n}</h3><p class="hint" id="corrHint"></p>` +
+    (n ? gloss.corrections.map((c, i) => `<div class="g-row"><span class="h"></span><span class="a">→</span><span class="c"></span><button class="g-x" data-k="correction" data-i="${i}" title="Remove">×</button></div>`).join("")
+       : `<p class="hint">None yet. DeepSeek adds them each time you press Make slides.</p>`) +
+    `</div><div class="g-sec"><h3>Course terms · ${gloss.terms.length}</h3><p class="hint">Sent to DeepSeek with every request, so it recognises them.</p><div class="g-terms">` +
+    gloss.terms.map((t, i) => `<span class="g-term"><span></span><button class="g-x" data-k="term" data-i="${i}" title="Remove">×</button></span>`).join("") + `</div></div>`;
+  $("matHint").textContent = `PDFs for ${course} (slides, lab handouts). DeepSeek searches them to spell commands and terms right and to point you to pages, shown in the notes as “Materiale: «file» p. 12”. Slides still contain only what the professor said. Text is read on this Mac; scanned PDFs without text aren't supported yet.`;
+  v.querySelectorAll(".m-row .c").forEach((el, i) => { el.textContent = mat[i].name; });
+  $("corrHint").textContent = `Misheard words that Lecture Scribe fixes live while transcribing ${course}, from the next sentence on. Remove any that are wrong.`;
+  v.querySelectorAll(".g-row").forEach((r, i) => { r.querySelector(".h").textContent = gloss.corrections[i].heard; r.querySelector(".c").textContent = gloss.corrections[i].correct; });
+  v.querySelectorAll(".g-term > span").forEach((el, i) => { el.textContent = gloss.terms[i]; });
+}
+$("glossBtn").onclick = $("matBtn").onclick = () => { glossOpen = !glossOpen; renderGloss(); if (glossOpen) loadGloss(); };
+$("glossView").addEventListener("click", (e) => {
+  if (e.target.id === "matAdd") { matBusy = true; renderGloss(); send("materialAdd", { course: $("course").value }); return; }
+  const b = e.target.closest(".g-x"); if (!b) return;
+  const i = +b.dataset.i, kind = b.dataset.k;
+  if (kind === "material") { if (confirm(`Remove “${mat[i].name}” from the course material?`)) send("materialRemove", { course: $("course").value, name: mat[i].name }); return; }
+  const value = kind === "term" ? gloss.terms[i] : gloss.corrections[i].heard;
+  send("glossaryRemove", { course: $("course").value, kind, value });
+});
+
+/* divider drag */
+$("divider").addEventListener("mousedown", (e) => {
+  e.preventDefault(); $("divider").classList.add("drag");
+  const move = (ev) => { const r = $("split").getBoundingClientRect(); leftPct = Math.max(22, Math.min(75, ((ev.clientX - r.left) / r.width) * 100)); applySplit(); };
+  const up = () => { $("divider").classList.remove("drag"); removeEventListener("mousemove", move); removeEventListener("mouseup", up); persist(); };
+  addEventListener("mousemove", move); addEventListener("mouseup", up);
+});
+
+/* ---------- engine events ---------- */
+window.onEngine = (e) => {
+  switch (e.type) {
+    case "init": {
+      models = e.models; settings = e.settings || {};
+      $("outDir").textContent = e.outDir.replace(/^\/Users\/[^/]+/, "~");
+      const m = $("model"); m.innerHTML = "";
+      for (const x of models) m.add(new Option(x.label, x.path));
+      if (models.some(x => x.path === settings.model)) m.value = settings.model;
+      const d = $("device"); d.innerHTML = ""; d.add(new Option("System default" + (e.defaultDevice ? ` (${e.defaultDevice})` : ""), ""));
+      for (const n of e.devices) d.add(new Option(n, n));
+      if (e.devices.includes(settings.device)) d.value = settings.device;
+      $("lang").value = settings.language || "it";
+      if (settings.saveAudio === false) $("saveAudio").checked = false;
+      if (settings.fontSize) { fontSize = settings.fontSize; applyFont(); }
+      if (settings.leftPct) leftPct = settings.leftPct;
+      applySplit();
+      $("course").value = settings.course ?? "Protocolli e reti";
+      const r = $("recent"); r.length = 1;
+      for (const x of e.recent || []) r.add(new Option(x.name, x.path));
+      if (!models.length) {
+        $("empty").innerHTML = "No Parakeet model was found.<br>Open <b>Handy → Settings → Models</b> and download " +
+          "<b>Parakeet Unified</b> or <b>Parakeet V3</b>, then click below.<br><br><button onclick=\"send('refresh')\">Look again</button>";
+      } else if (loadedModel !== m.value) { modelReady = false; send("preload", { model: m.value }); }
+      renderSlides();
+      loadGloss();
+      break;
+    }
+    case "material": {
+      if (e.course !== $("course").value) break;
+      mat = e.files || []; matBusy = false;
+      if (e.added?.length) toast(`Added ${e.added.join(", ")}`);
+      for (const err of e.errors || []) toast(err, true);
+      renderGloss();
+      break;
+    }
+    case "glossary": {
+      if (e.course !== $("course").value) break;
+      gloss = { corrections: e.corrections || [], terms: e.terms || [] };
+      renderGloss();
+      break;
+    }
+    case "modelLoading": modelReady = false; loadedModel = null; $("status").textContent = "Loading model…"; break;
+    case "modelReady": modelReady = true; loadedModel = e.path; break;
+    case "state": {
+      const prev = state; state = e.state; window.device = e.device || window.device;
+      if (state === "recording" && prev !== "recording") runStart = performance.now();
+      if (state !== "recording" && runStart !== null) { elapsed += (performance.now() - runStart) / 1000; runStart = null; }
+      break;
+    }
+    case "partial": {
+      const p = $("partial");
+      if (!e.text) { p.style.display = "none"; break; }
+      p.style.display = ""; p.lastChild.textContent = e.text; $("empty").style.display = "none";
+      if (follow) scrollLive();
+      break;
+    }
+    case "commit": addSeg(e.t, e.text); if (follow) scrollLive(); break;
+    case "level": {
+      const pct = Math.max(0, Math.min(100, (e.db + 60) / 50 * 100));
+      $("meter").firstChild.style.width = pct + "%"; break;
+    }
+    case "notice": toast(e.message); break;
+    case "error": toast(e.message, true); break;
+    case "autosaved": {
+      setCurPath(e.path);
+      const name = e.path.split("/").pop();
+      const s = $("saved");
+      s.innerHTML = " · <span style='color:var(--success)'>●</span> Autosaved " +
+        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " to <a id='openT'></a>";
+      $("openT").textContent = name;
+      $("openT").onclick = () => send("reveal", { path: e.path });
+      break;
+    }
+    case "saved": {
+      setCurPath(e.transcript);
+      const name = e.transcript.split("/").pop();
+      const s = $("saved"); s.innerHTML = " · <span style='color:var(--success)'>●</span> Saved <a id='openT'></a> · <a id='revealT'>Show in Finder</a>";
+      $("openT").textContent = name;
+      $("openT").onclick = () => send("open", { path: e.transcript });
+      $("revealT").onclick = () => send("reveal", { path: e.transcript });
+      toast("Transcript saved: " + name);
+      break;
+    }
+    case "transcript": {
+      clearTranscript(); elapsed = 0; runStart = null;
+      $("title").value = e.title === "Lecture" ? "" : e.title;
+      for (const [t, text] of e.lines) addSeg(t, text, true);
+      if (!e.lines.length) $("empty").style.display = "";
+      $("scroller").scrollTop = 0; follow = false;
+      const s = $("saved"); s.innerHTML = " · <a id='openT'></a>"; $("openT").textContent = e.path.split("/").pop();
+      $("openT").onclick = () => send("reveal", { path: e.path });
+      curPath = null; setCurPath(e.path);
+      break;
+    }
+    case "slides": {
+      if (e.path !== curPath) break;
+      const before = deck?.slides?.length ?? 0;
+      const wasBusy = slidesBusy && e.added != null;
+      if (e.added != null) slidesBusy = false;
+      slidesErr = "";
+      deck = e;
+      if (wasBusy && e.rebuilt) {
+        renderSlides(0);
+        toast(`Deck rebuilt: ${e.slides.length} slides`);
+      } else if (wasBusy) {
+        renderSlides(e.replaced ? Math.max(0, before - 1) : before);
+        const fresh = e.added - (e.replaced ? 1 : 0);
+        const L = e.learned || {};
+        if (L.corrections || L.terms) {
+          toast(`Glossary: ${L.corrections ? L.corrections + " new correction" + (L.corrections === 1 ? "" : "s") : ""}${L.corrections && L.terms ? ", " : ""}${L.terms ? L.terms + " new term" + (L.terms === 1 ? "" : "s") : ""}`);
+          loadGloss();
+        }
+        toast(e.added ? `${fresh > 0 ? fresh + " new slide" + (fresh === 1 ? "" : "s") : ""}${e.replaced ? (fresh > 0 ? " · " : "") + "last slide updated" : ""}` : "Nothing new worth a slide");
+      } else renderSlides();
+      break;
+    }
+    case "slidesError": {
+      if (e.path && e.path !== curPath) break;
+      slidesBusy = false; slidesErr = e.message; renderSlidesBar();
+      break;
+    }
+  }
+  render();
+};
+
+setInterval(() => {
+  const t = elapsed + (runStart !== null ? (performance.now() - runStart) / 1000 : 0);
+  $("timer").textContent = fmt(t);
+}, 250);
+
+$("startBtn").onclick = () => {
+  clearTranscript(); $("saved").innerHTML = "";
+  elapsed = 0; runStart = null; follow = true;
+  $("empty").style.display = "none";
+  setCurPath(null);
+  const m = curModel();
+  send("start", { model: m.path, modelLabel: m.label, device: $("device").value, language: $("lang").value,
+    title: $("title").value, saveAudio: $("saveAudio").checked, course: $("course").value });
+};
+$("pauseBtn").onclick = () => send(state === "paused" ? "resume" : "pause");
+$("stopBtn").onclick = () => send("stop");
+$("folderBtn").onclick = () => send("openFolder");
+$("recent").onchange = () => { const p = $("recent").value; $("recent").value = ""; if (p) send("loadTranscript", { path: p }); };
+$("model").onchange = () => { persist(); modelReady = false; render(); send("preload", { model: $("model").value }); };
+for (const id of ["device", "lang", "saveAudio"]) $(id).onchange = () => { persist(); render(); };
+$("smaller").onclick = () => { fontSize = Math.max(13, fontSize - 1); applyFont(); persist(); };
+$("bigger").onclick = () => { fontSize = Math.min(32, fontSize + 1); applyFont(); persist(); };
+$("copyBtn").onclick = () => {
+  const text = ($("title").value ? $("title").value + "\n\n" : "") + segs.map(s => `[${fmt(s.t)}] ${s.text}`).join("\n\n");
+  const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+  document.execCommand("copy"); ta.remove(); toast("Transcript copied to clipboard");
+};
+document.addEventListener("keydown", (ev) => {
+  if (ev.metaKey && ev.key === "Enter") {
+    ev.preventDefault();
+    if (ev.shiftKey) return makeSlides(false);
+    if (state === "idle") $("startBtn").click(); else $("stopBtn").click();
+  }
+});
+render();
+document.fonts && document.fonts.ready.then(() => fitSlideText($("slideList")));
+send("ready");
+</script>
+</body>
+</html>

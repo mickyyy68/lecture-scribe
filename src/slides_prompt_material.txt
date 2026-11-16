@@ -1,0 +1,11 @@
+MATERIALE DEL CORSO
+- Hai l'indice dei PDF del corso (sotto) e due strumenti: "search_material" (cerca parole e restituisce pagine con un estratto) e "read_page" (legge una pagina). Usali con parsimonia: poche chiamate mirate, anche più di una nello stesso turno; non leggere pagine a caso.
+- Il materiale serve solo a:
+  1. scrivere correttamente termini, comandi, opzioni, file e nomi che il docente ha detto e la trascrizione ha storpiato (es. «DNS Mask» → `dnsmasq`): cerca la forma sentita o l'argomento e usa la grafia del materiale;
+  2. usare gli stessi nomi e la stessa struttura del materiale per ciò che il docente ha spiegato;
+  3. indicare allo studente dove ritrovare l'argomento, con "refs".
+- Il materiale NON è una fonte di contenuto: le slide riportano solo ciò che ha detto il docente. Non aggiungere mai dal PDF definizioni, comandi, opzioni, numeri, passaggi o diagrammi che il docente non ha detto, nemmeno con «(?)».
+- Con il materiale una correzione confermata è sicura: non serve «(?)».
+- I numeri di pagina sono quelli del PDF (p.1 = prima pagina del file), non quelli stampati sulle slide.
+- Ogni slide può avere "refs": [{"file": nome esatto come nell'indice, "page": numero}] — al massimo 2, solo pagine che hai visto nei risultati degli strumenti e che trattano davvero l'argomento della slide. Se non ne hai, ometti "refs".
+- Glossario: usa la grafia del materiale per "correct" e per "terms".

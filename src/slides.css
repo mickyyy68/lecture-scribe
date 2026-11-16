@@ -1,0 +1,49 @@
+/* Slide content on top of Protocolli & Reti (tokens.css + bundle.css). Sizes are the 1280×720 base. */
+.pr-slide { font-family: var(--font-sans); text-align: left; }
+.pr-slide * { box-sizing: border-box; }
+.s-cover { display: flex; flex-direction: column; justify-content: center; padding-bottom: 56px; }
+.s-cover .pr-eyebrow { margin-bottom: var(--space-8); }
+.s-cover .pr-sub { margin-top: var(--space-6); }
+.pr-slide .slide-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pr-body { align-items: start; }
+.pr-body > * { min-width: 0; }
+.pr-body.s-one { grid-template-columns: 1fr; gap: var(--space-6); }
+.s-col { display: grid; gap: var(--space-6); align-content: start; min-width: 0; }
+.s-p { margin: 0; }
+.s-list { margin: 0; }
+.s-def { margin-top: 10px; }
+.s-check { border-style: dashed; background: transparent; }
+.s-check .tag { color: var(--warning); }
+.s-checktext { margin: 0; font-size: 20px; line-height: 30px; color: var(--muted-foreground); }
+.s-notice { background: var(--warning-subtle); border-color: var(--warning); }
+.s-notice .tag { color: var(--warning); background: var(--background); }
+.s-noticetext { margin: 0; font-size: 21px; line-height: 30px; color: var(--foreground); }
+.s-quote { margin: 0; color: var(--muted-foreground); font-size: 30px; line-height: 40px; }
+.s-cap { font-family: var(--font-mono); font-size: 14px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); margin: 0 0 var(--space-2); }
+.s-seq { margin: 0; }
+/* Never taller than the slide body: the drawing keeps its proportions inside the box. */
+.s-seq svg { display: block; width: 100%; max-width: 860px; height: auto; max-height: 400px; }
+.pr-body.s-one .s-seq svg { margin: 0 auto; }
+.pr-seq .note { fill: var(--warning); }
+.pr-seq .lbl { font-size: 16px; }
+.pr-seq .meta { font-size: 14px; }
+.s-net { display: flex; align-items: center; padding-top: var(--space-8); }
+.s-node { flex: none; min-width: 110px; background: var(--card); border: var(--stroke-hairline) solid var(--border); padding: var(--space-2) var(--space-4); font-family: var(--font-mono); text-align: center; }
+.s-node b { display: block; font-size: 18px; line-height: 26px; font-weight: 600; }
+.s-node small { display: block; font-size: 15px; line-height: 20px; color: var(--muted-foreground); }
+.s-link { flex: 1 1 60px; min-width: 70px; height: 2px; background: var(--diagram-link); position: relative; }
+.s-link span { position: absolute; left: 4px; right: 4px; bottom: 8px; text-align: center; font-family: var(--font-mono); font-size: 15px; line-height: 19px; color: var(--muted-foreground); }
+.pr-term pre { white-space: pre-wrap; word-break: break-word; }
+.pr-slide .ic { font-family: var(--font-mono); font-size: .86em; background: var(--muted); padding: 0 6px; }
+.pr-slide strong { font-weight: 600; }
+.unsure { font-family: var(--font-mono); font-size: 14px; color: var(--warning); vertical-align: 2px; }
+.pr-slide .pr-list li { padding: 12px 0; }
+.pr-slide.dense .pr-body { margin-top: var(--space-6); }
+.pr-slide.dense .pr-list li { padding: 8px 0; }
+.pr-slide.dense .body { font-size: 20px; line-height: 28px; }
+.pr-slide.dense .pr-def .text { font-size: 21px; line-height: 30px; }
+.pr-slide.dense .pr-term pre { font-size: 14px; line-height: 21px; }
+.pr-slide.denser .pr-sub { display: none; }
+.pr-slide.denser .pr-list li { padding: 6px 0; }
+.pr-slide.denser .body { font-size: 18px; line-height: 25px; }
+.pr-slide.denser .pr-table td { padding: 8px var(--space-4); }

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="it" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{TITLE}}</title>
+<style>{{BUNDLE}}</style>
+<style>{{TOKENS}}</style>
+<style>{{SLIDES_CSS}}</style>
+<style>
+  body { margin: 0; }
+  .top { max-width: 1280px; margin: 0 auto; padding: var(--space-8) var(--space-6) var(--space-4); display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-4); }
+  .top h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -0.02em; }
+  .top p { margin: 0; font-family: var(--font-mono); font-size: 13px; color: var(--muted-foreground); }
+  .deck { display: grid; gap: var(--space-8); max-width: 1280px; margin: 0 auto; padding: var(--space-4) var(--space-6) var(--space-20); }
+  .fr { width: 100%; aspect-ratio: 16 / 9; position: relative; overflow: hidden; outline: var(--stroke-hairline) solid var(--border); cursor: zoom-in; }
+  .fr > .pr-slide { position: absolute; top: 0; left: 0; transform-origin: 0 0; transform: scale(var(--k, 1)); }
+  .meta { display: flex; gap: var(--space-4); font-family: var(--font-mono); font-size: 13px; color: var(--muted-foreground); margin-top: var(--space-2); }
+  .notes { margin: var(--space-2) 0 0; font-size: 16px; line-height: 25px; color: var(--muted-foreground); max-width: 900px; }
+  .present { position: fixed; inset: 0; background: var(--background); z-index: 9; display: none; align-items: center; justify-content: center; }
+  .present.on { display: flex; }
+  .present .fr { outline: none; cursor: default; }
+  @media print { .top, .meta, .notes { display: none; } .deck { gap: 0; padding: 0; } .fr { outline: none; break-after: page; } }
+</style>
+</head>
+<body>
+<header class="top"><h1>{{TITLE}}</h1><p>Clicca una slide o premi P per presentare · ← → per scorrere · Esc per uscire</p></header>
+<main class="deck" id="deck"></main>
+<div class="present" id="present"><div class="fr" id="pfr"></div></div>
+<script>{{SLIDES_JS}}</script>
+<script>
+const DATA = {{DATA}};
+const FOOT = {{FOOT}};
+const n = DATA.length;
+const deck = document.getElementById("deck");
+deck.innerHTML = DATA.map((s, i) => `<section><div class="fr" data-i="${i}">${renderSlide(s, i + 1, n, FOOT)}</div>` +
+  `<div class="meta"><span>${[s.from, s.to].filter(Boolean).join(" – ")}</span></div>` +
+  (s.notes ? `<p class="notes"></p>` : "") + `</section>`).join("");
+deck.querySelectorAll("section").forEach((sec, i) => { const p = sec.querySelector(".notes"); if (p) p.textContent = DATA[i].notes; });
+fitSlideText(deck);
+document.fonts && document.fonts.ready.then(() => fitSlideText(deck));
+const fit = (fr) => fr.style.setProperty("--k", fr.clientWidth / 1280);
+const fitAll = () => document.querySelectorAll(".fr").forEach(fit);
+new ResizeObserver(fitAll).observe(document.body);
+let cur = -1;
+const pr = document.getElementById("present"), pfr = document.getElementById("pfr");
+function show(i) {
+  cur = Math.max(0, Math.min(n - 1, i));
+  pfr.innerHTML = renderSlide(DATA[cur], cur + 1, n, FOOT);
+  const k = Math.min(innerWidth / 1280, innerHeight / 720);
+  pfr.style.width = 1280 * k + "px"; pfr.style.setProperty("--k", k);
+  pr.classList.add("on");
+  fitSlideText(pfr);
+}
+deck.addEventListener("click", (e) => { const fr = e.target.closest(".fr"); if (fr) show(+fr.dataset.i); });
+addEventListener("resize", () => cur >= 0 && pr.classList.contains("on") && show(cur));
+addEventListener("keydown", (e) => {
+  const on = pr.classList.contains("on");
+  if (e.key === "p" || e.key === "P") show(cur < 0 ? 0 : cur);
+  else if (e.key === "Escape") pr.classList.remove("on");
+  else if (on && ["ArrowRight", "ArrowDown", " ", "PageDown"].includes(e.key)) { e.preventDefault(); show(cur + 1); }
+  else if (on && ["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) { e.preventDefault(); show(cur - 1); }
+});
+</script>
+</body>
+</html>
