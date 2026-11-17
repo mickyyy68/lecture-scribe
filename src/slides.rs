@@ -15,6 +15,7 @@ pub const KATEX_JS: &str = include_str!("katex/katex.min.js");
 const DECK_HTML: &str = include_str!("deck.html");
 const PROMPT: &str = include_str!("slides_prompt.txt");
 const PROMPT_MATERIAL: &str = include_str!("slides_prompt_material.txt");
+const SAMPLE_LECTURE: &str = include_str!("sample_lecture.md");
 /// Claude Code model aliases and reasoning efforts offered in the app.
 pub const MODELS: &[&str] = &["sonnet", "opus", "fable", "haiku"];
 pub const EFFORTS: &[&str] = &["low", "medium", "high", "max"];
@@ -238,32 +239,15 @@ pub fn generate(t: &Path, course: &str, mode: Mode, model: &str, effort: &str, l
         )
     });
     let user = format!("LECTURE TRANSCRIPT:\n{transcript}\n=== REQUEST ===\n{}", tail.join("\n\n"));
-    let course_name = if course.trim().is_empty() { String::new() } else { format!(" of the course \"{}\"", course.trim()) };
-    let language = match lang_name(lang) {
-        Some(n) => n.to_string(),
-        None => "the language the lecture is given in".to_string(),
-    };
     let docs = crate::material::load(course);
-    let mut system = PROMPT.replace("{course}", &course_name).replace("{language}", &language);
-    if !docs.is_empty() {
-        system.push_str("\n");
-        system.push_str(PROMPT_MATERIAL);
-        system.push_str("\nMATERIAL INDEX (file, page, first line):\n");
-        system.push_str(&crate::material::index(&docs));
-    }
-    let model = if MODELS.contains(&model) { model } else { DEFAULT_MODEL };
-    let mut effort = if EFFORTS.contains(&effort) { effort } else { DEFAULT_EFFORT };
+    let system = system_prompt(course, lang, &docs, &crate::paths::load_settings()["style"]);
+    let (model, mut effort) = model_effort(model, effort);
     if (rebuild || review) && matches!(effort, "low" | "medium") {
         effort = "high";
     }
     let Run { content, usage, lookups, seen } = run_claude(&system, &user, course, !docs.is_empty(), model, effort, rebuild || review)?;
-    let content = content.as_str();
-    let (a, b) = (content.find('{'), content.rfind('}'));
-    let out: Value = match (a, b) {
-        (Some(a), Some(b)) if b > a => serde_json::from_str(&content[a..=b]).map_err(|e| format!("The slide JSON isn't valid: {e}"))?,
-        _ => return Err("The answer has no JSON.".into()),
-    };
-    let mut slides: Vec<Value> = out["slides"].as_array().cloned().unwrap_or_default().into_iter().filter(|s| s.is_object()).collect();
+    let out = answer_json(&content)?;
+    let mut slides = slides_in(&out);
     if review {
         slides.retain(|s| s["kind"] == "review" && s["cards"].as_array().is_some_and(|c| !c.is_empty()));
         if slides.is_empty() {
@@ -274,14 +258,7 @@ pub fn generate(t: &Path, course: &str, mode: Mode, model: &str, effort: &str, l
     if replace {
         slides.insert(0, out["replace_last"].clone());
     }
-    // Models sometimes give a column as a single block instead of a list.
-    for s in slides.iter_mut() {
-        for col in ["left", "right"] {
-            if s[col].is_object() {
-                s[col] = json!([s[col].take()]);
-            }
-        }
-    }
+    normalize(&mut slides);
     let flagged = fact_check(&mut slides, &transcript, course, &crate::material::words(&docs));
     let code = Some(lang).filter(|l| lang_name(l).is_some()).or(out["language"].as_str()).unwrap_or("").to_lowercase();
     attach_refs(&mut slides, &docs, &seen, &code);
@@ -315,6 +292,170 @@ pub fn generate(t: &Path, course: &str, mode: Mode, model: &str, effort: &str, l
     st["rebuilt"] = json!(rebuild);
     st["reviewed"] = json!(review);
     Ok(st)
+}
+
+fn model_effort<'a>(model: &'a str, effort: &'a str) -> (&'a str, &'a str) {
+    (if MODELS.contains(&model) { model } else { DEFAULT_MODEL }, if EFFORTS.contains(&effort) { effort } else { DEFAULT_EFFORT })
+}
+
+/// The slide prompt for a course and slide language, with the course material's index and the
+/// student's slide style (`settings.style`, see `style_rules`).
+fn system_prompt(course: &str, lang: &str, docs: &[crate::material::Doc], style: &Value) -> String {
+    let course_name = if course.trim().is_empty() { String::new() } else { format!(" of the course \"{}\"", course.trim()) };
+    let language = lang_name(lang).unwrap_or("the language the lecture is given in");
+    let mut system = PROMPT.replace("{course}", &course_name).replace("{language}", language);
+    if !docs.is_empty() {
+        system.push('\n');
+        system.push_str(PROMPT_MATERIAL);
+        system.push_str("\nMATERIAL INDEX (file, page, first line):\n");
+        system.push_str(&crate::material::index(docs));
+    }
+    system.push_str(&style_rules(style));
+    system
+}
+
+/// The student's slide style as prompt rules. Each control's default adds nothing, so with the
+/// defaults and no own rules the prompt is the plain one.
+///
+/// `style` = {"density": "minimal"|"balanced"|"detailed", "titles": "statement"|"topic"|"question",
+/// "items": "terse"|"sentences", "notes": "none"|"short"|"full", "visuals": "text"|"balanced"|"diagrams",
+/// "rules": free text}.
+pub fn style_rules(style: &Value) -> String {
+    let get = |k: &str| style[k].as_str().unwrap_or("");
+    let mut r: Vec<&str> = Vec::new();
+    r.push(match get("density") {
+        "minimal" => "Density: minimal. Lists of at most 3 items of at most ~35 characters, usually one block per column. Prefer more slides with less on each.",
+        "detailed" => "Density: detailed. Lists of up to 5 items of up to ~80 characters, use the subtitle, and fit a second block in a column when there is room. Fewer, fuller slides (still within the body height).",
+        _ => "",
+    });
+    r.push(match get("titles") {
+        "topic" => "Titles: name the topic or mechanism in 1-5 words (\"Softmax\", \"Three-way handshake\"), not a full claim.",
+        "question" => "Titles: a short question the slide answers (\"Why normalise the scores?\", \"What does TTL prevent?\"), as a study prompt.",
+        _ => "",
+    });
+    r.push(match get("items") {
+        "sentences" => "List items: complete short sentences with a verb, each understandable on its own when studying weeks later.",
+        "terse" => "List items: telegraphic phrases (no articles where the language allows, no full stops); the meaning must stay clear.",
+        _ => "",
+    });
+    r.push(match get("notes") {
+        "none" => "Notes: leave \"notes\" empty, except for a detail the student would really miss.",
+        "full" => "Notes: 3-5 sentences that retell the professor's explanation in order, with the examples given, as a text to study from.",
+        _ => "",
+    });
+    r.push(match get("visuals") {
+        "text" => "Visuals: prefer lists, definitions and formulas; draw a diagram only when the professor clearly describes one.",
+        "diagrams" => "Visuals: whenever something can be drawn (a process, structure, comparison, function or exchange), draw it, so most slides carry a diagram, plot, table or formula. Still only with what was said (FIDELITY).",
+        _ => "",
+    });
+    r.retain(|x| !x.is_empty());
+    let own = get("rules").trim();
+    if r.is_empty() && own.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("\nSTYLE (the student's choices: they override FEW WORDS and VARIETY AND LAYOUT where they conflict, never FIDELITY, the block limits or the FORMAT)\n");
+    for x in r {
+        out.push_str(&format!("- {x}\n"));
+    }
+    if !own.is_empty() {
+        out.push_str(&format!("The student's own rules:\n{own}\n"));
+    }
+    out
+}
+
+/// The JSON object in a model answer (models sometimes wrap it in prose or a code fence).
+fn answer_json(content: &str) -> Result<Value, String> {
+    match (content.find('{'), content.rfind('}')) {
+        (Some(a), Some(b)) if b > a => serde_json::from_str(&content[a..=b]).map_err(|e| format!("The slide JSON isn't valid: {e}")),
+        _ => Err("The answer has no JSON.".into()),
+    }
+}
+
+fn slides_in(out: &Value) -> Vec<Value> {
+    out["slides"].as_array().cloned().unwrap_or_default().into_iter().filter(|s| s.is_object()).collect()
+}
+
+/// Models sometimes give a column as a single block instead of a list.
+fn normalize(slides: &mut [Value]) {
+    for s in slides.iter_mut() {
+        for col in ["left", "right"] {
+            if s[col].is_object() {
+                s[col] = json!([s[col].take()]);
+            }
+        }
+    }
+}
+
+/// The excerpt the style samples are made from: about three minutes from a third of the way into
+/// the latest lecture with enough text, or the built-in sample. Returns (label, lines).
+fn sample_excerpt(dir: &Path, builtin: bool) -> (String, Vec<(String, String)>) {
+    let secs = |t: &str| t.split(':').fold(0u64, |a, x| a * 60 + x.parse::<u64>().unwrap_or(0));
+    if !builtin {
+        for r in recent(dir) {
+            let p = PathBuf::from(r["path"].as_str().unwrap_or(""));
+            let Ok((_, lines)) = read_transcript(&p) else { continue };
+            if lines.len() < 30 {
+                continue;
+            }
+            let start = lines.len() / 3;
+            let t0 = secs(&lines[start].0);
+            let (mut chars, mut out) = (0, Vec::new());
+            for l in &lines[start..] {
+                if !out.is_empty() && (secs(&l.0) > t0 + 180 || chars > 3500) {
+                    break;
+                }
+                chars += l.1.len();
+                out.push(l.clone());
+            }
+            let label = format!("{}, {} – {}", r["name"].as_str().unwrap_or(""), out[0].0, out.last().unwrap().0);
+            return (label, out);
+        }
+    }
+    ("Built-in sample: Gradient descent".into(), parse_transcript(SAMPLE_LECTURE).1)
+}
+
+/// Three sample slides in the given style, for the Slide style page. With `feedback`, the
+/// previous sample and the student's comment go along, and the answer also carries the own rules
+/// rewritten to include it ("rules"), which the page puts back in its text box.
+#[allow(clippy::too_many_arguments)]
+pub fn sample(dir: &Path, builtin: bool, course: &str, model: &str, effort: &str, lang: &str, style: &Value, feedback: &str, previous: &Value) -> Result<Value, String> {
+    let (label, lines) = sample_excerpt(dir, builtin);
+    let transcript: String = lines.iter().map(|(t, x)| format!("[{t}] {x}\n")).collect();
+    let mut req = vec![format!(
+        "SAMPLE: make exactly 3 slides from these lines, as you would in the real deck, so the student can judge the style. \
+         No cover slides. If the lines allow it, let one slide show a diagram, plot or formula. \"replace_last\": null, \"glossary\" empty."
+    )];
+    let feedback = feedback.trim();
+    if !feedback.is_empty() {
+        if previous.is_array() {
+            req.push(format!("PREVIOUS SAMPLE (JSON):\n{previous}"));
+        }
+        req.push(format!(
+            "STUDENT FEEDBACK on the previous sample: «{feedback}»\n\
+             Apply it in the new sample. Also return \"rules\": the student's own rules (shown in STYLE, possibly none) rewritten to include this feedback: \
+             short, general rules about how all their slides should be, one per line starting with \"- \", at most 8, in the language of the feedback. \
+             Keep the earlier rules unless the feedback contradicts them; nothing specific to this excerpt; don't repeat the STYLE choices above."
+        ));
+    }
+    let user = format!("LECTURE TRANSCRIPT (an excerpt):\n{transcript}\n=== REQUEST ===\n{}", req.join("\n\n"));
+    let system = system_prompt(course, lang, &[], style);
+    let (model, effort) = model_effort(model, effort);
+    let run = run_claude(&system, &user, course, false, model, effort, false)?;
+    let out = answer_json(&run.content)?;
+    let mut slides = slides_in(&out);
+    slides.retain(|s| s["kind"] != "review");
+    slides.truncate(3);
+    if slides.is_empty() {
+        return Err("Claude Code returned no slides.".into());
+    }
+    normalize(&mut slides);
+    fact_check(&mut slides, &transcript, course, &Default::default());
+    let mut ev = json!({ "type": "styleSample", "slides": slides, "source": label, "usage": usage_summary(&run.usage),
+        "lang": Some(lang).filter(|l| lang_name(l).is_some()).or(out["language"].as_str()).unwrap_or("") });
+    if !feedback.is_empty() {
+        ev["rules"] = json!(out["rules"].as_str().map(str::trim).unwrap_or(style["rules"].as_str().unwrap_or("")));
+    }
+    Ok(ev)
 }
 
 /// Languages the slides can be written in (Parakeet V3's), by ISO code.
@@ -763,16 +904,91 @@ pub fn recent(dir: &Path) -> Vec<Value> {
         .collect()
 }
 
+/// One edit to a finished line, made by hand: `set` replaces line `i`'s text (empty deletes
+/// it), `insert` adds a line at index `i` (stamped with the time of the line above it),
+/// `delete` removes line `i`. Other parts of the transcript (title, date, "Continued" notes)
+/// stay where they are. Returns the new transcript and how the line count changed, or `None`
+/// when there's nothing to do.
+pub fn edit_body(body: &str, op: &str, i: usize, text: &str) -> Result<Option<(String, i64)>, String> {
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut parts: Vec<String> = body.split("\n\n").map(str::to_string).collect();
+    let tail = parts.pop().unwrap_or_default();
+    let is_line = |x: &str| x.trim().strip_prefix("**[").and_then(|r| r.split_once("]** ")).is_some();
+    let at: Vec<usize> = (0..parts.len()).filter(|&k| is_line(&parts[k])).collect();
+    let time = |k: usize| parts[k].trim()[3..].split_once("]** ").map(|(t, _)| t.to_string()).unwrap_or_default();
+    let gone = "That line isn't in the transcript any more.";
+    let shift = match op {
+        "set" | "delete" => {
+            let k = *at.get(i).ok_or(gone)?;
+            if op == "delete" || text.is_empty() {
+                parts.remove(k);
+                -1
+            } else {
+                parts[k] = format!("**[{}]** {text}", time(k));
+                0
+            }
+        }
+        "insert" if !text.is_empty() => {
+            let (t, k) = match i {
+                // Before the first line (or after the header when there are none yet).
+                0 => (at.first().map(|&k| time(k)).unwrap_or_else(|| "00:00:00".into()), at.first().copied().unwrap_or(parts.len())),
+                _ => {
+                    let above = *at.get(i - 1).ok_or(gone)?;
+                    (time(above), above + 1)
+                }
+            };
+            parts.insert(k, format!("**[{t}]** {text}"));
+            1
+        }
+        _ => return Ok(None),
+    };
+    parts.push(tail);
+    Ok(Some((parts.join("\n\n"), shift)))
+}
+
+/// After a line is added (`shift` 1) or removed (-1) at index `i`, the deck's line ranges move
+/// with it, so its slides keep pointing at the same lines.
+pub fn shift_deck(p: &Path, i: usize, shift: i64) -> Result<(), String> {
+    if shift == 0 || !deck_path(p, ".json").exists() {
+        return Ok(());
+    }
+    let mut deck = load_deck(p);
+    for b in deck["batches"].as_array_mut().into_iter().flatten() {
+        for key in ["from_line", "to_line"] {
+            if let Some(n) = b[key].as_u64().filter(|&n| n as usize > i) {
+                b[key] = json!((n as i64 + shift).max(0));
+            }
+        }
+    }
+    let (title, _) = read_transcript(p)?;
+    save(p, &deck, &title)
+}
+
+/// A hand edit to a lecture that isn't being recorded (see `edit_body`), saved to its file.
+pub fn edit_line(p: &Path, op: &str, i: usize, text: &str) -> Result<Value, String> {
+    let body = std::fs::read_to_string(p).map_err(|e| format!("Can't read the transcript: {e}"))?;
+    if let Some((body, shift)) = edit_body(&body, op, i, text)? {
+        write_atomic(p, &body)?;
+        shift_deck(p, i, shift)?;
+    }
+    transcript_payload(p)
+}
+
 /// For opening a past lecture in the transcript pane.
 pub fn transcript_payload(p: &Path) -> Result<Value, String> {
-    let (title, lines) = read_transcript(p)?;
-    let secs = |t: &str| t.split(':').fold(0u64, |a, x| a * 60 + x.parse::<u64>().unwrap_or(0));
+    let text = std::fs::read_to_string(p).map_err(|e| format!("Can't read the transcript: {e}"))?;
     Ok(json!({
         "type": "transcript",
         "path": p.to_string_lossy(),
-        "title": title,
-        "lines": lines.iter().map(|(t, x)| json!([secs(t), x])).collect::<Vec<_>>(),
+        "title": parse_transcript(&text).0,
+        "lines": lines_payload(&text),
     }))
+}
+
+/// The finished lines as `[[seconds, text], …]`, as the transcript pane takes them.
+pub fn lines_payload(text: &str) -> Value {
+    let secs = |t: &str| t.split(':').fold(0u64, |a, x| a * 60 + x.parse::<u64>().unwrap_or(0));
+    json!(parse_transcript(text).1.iter().map(|(t, x)| json!([secs(t), x])).collect::<Vec<_>>())
 }
 
 #[cfg(test)]
@@ -781,6 +997,44 @@ mod tests {
 
     /// Every block type the prompt allows, including plain-string list items and a stray
     /// string block, must go through the fact check without panicking.
+    #[test]
+    fn style_rules_default_to_nothing() {
+        assert_eq!(style_rules(&json!({})), "");
+        assert_eq!(style_rules(&json!({ "density": "balanced", "titles": "statement", "notes": "short", "visuals": "balanced", "items": "", "rules": " " })), "");
+        let r = style_rules(&json!({ "titles": "question", "rules": "- Keep English terms" }));
+        assert!(r.contains("STYLE") && r.contains("short question") && r.contains("- Keep English terms") && !r.contains("Density"));
+    }
+
+    #[test]
+    fn edit_line_keeps_the_file_and_deck_in_step() {
+        let dir = std::env::temp_dir().join(format!("tl-edit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("L.md");
+        std::fs::write(&p, "# L\n\n_date_\n\n**[00:00:01]** a\n\n**[00:00:05]** b\n\n_Continued_\n\n**[00:01:00]** c\n\n").unwrap();
+        std::fs::write(deck_path(&p, ".json"), r#"{"batches":[{"from_line":0,"to_line":2,"slides":[]}]}"#).unwrap();
+        let lines = |v: Value| v["lines"].as_array().unwrap().iter().map(|l| format!("{}:{}", l[0], l[1].as_str().unwrap())).collect::<Vec<_>>();
+        assert_eq!(lines(edit_line(&p, "set", 1, " b  fixed\n\nnow ").unwrap()), ["1:a", "5:b fixed now", "60:c"]);
+        assert_eq!(lines(edit_line(&p, "insert", 1, "mine").unwrap()), ["1:a", "1:mine", "5:b fixed now", "60:c"]);
+        assert_eq!(load_deck(&p)["batches"][0]["to_line"], 3);
+        assert_eq!(lines(edit_line(&p, "insert", 0, "top").unwrap())[0], "1:top");
+        assert_eq!(lines(edit_line(&p, "delete", 4, "").unwrap()), ["1:top", "1:a", "1:mine", "5:b fixed now"]);
+        assert_eq!(lines(edit_line(&p, "set", 0, "").unwrap()).len(), 3);
+        assert_eq!(load_deck(&p)["batches"][0]["to_line"], 3);
+        let body = std::fs::read_to_string(&p).unwrap();
+        assert!(body.starts_with("# L\n\n_date_\n\n") && body.contains("_Continued_") && body.ends_with("\n\n"));
+        assert!(edit_line(&p, "set", 9, "x").is_err());
+        // A recording's in-memory transcript: header only, then lines appended as they come.
+        let (b, n) = edit_body("# L\n\n_date_\n\n", "insert", 0, "first").unwrap().unwrap();
+        assert_eq!((b.as_str(), n), ("# L\n\n_date_\n\n**[00:00:00]** first\n\n", 1));
+        assert!(edit_body(&b, "insert", 1, "  ").unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sample_lecture_parses() {
+        assert!(parse_transcript(SAMPLE_LECTURE).1.len() >= 10);
+    }
+
     #[test]
     fn fact_check_handles_all_block_shapes() {
         let mut slides = vec![json!({

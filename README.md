@@ -30,7 +30,7 @@ The app is signed ad hoc, so it runs only on the Mac that built it. Set `SIGN_ID
 
 ## Using it
 
-On first launch a short setup walks you through it: downloading the speech model, testing the microphone, checking Claude Code, and choosing the course, languages and theme. You can open it again from **Settings → Open setup**.
+On first launch a short setup walks you through it: downloading the speech model, testing the microphone, checking Claude Code, choosing the course, languages and theme, and setting the slide style. You can open it again from **Settings → Open setup**.
 
 1. Pick the lecture's language and the microphone. Type a title if you like, then press **Start** (⌘↩).
 2. The transcript fills the left side as each sentence ends. It is saved continuously to `~/Documents/Lecture Transcripts/<date> <title>.md`, so a crash loses nothing. Tick **Also save audio** to keep a `.wav` next to it.
@@ -39,6 +39,12 @@ On first launch a short setup walks you through it: downloading the speech model
 5. Open a past lecture from the menu at the bottom to read it, make slides for it, or press **Continue** to record more into it.
 
 The deck is saved next to the transcript as `<lecture> · Slide.json` and `<lecture> · Slide.html`.
+
+### Fixing the transcript
+
+Click any line to edit it in place, as in a notes app. **Enter** splits the line at the cursor, and **Backspace** at the start of a line joins it to the line above. **↑** and **↓** at the start or end of a line move to the next one, and **Esc** undoes your typing in that line. Hover a line and click **+** next to its time to add a line below it, for something the model missed or a note of your own. A new line takes the time of the line above it. Empty a line to delete it. Dragging across lines still selects text to copy. Cut, copy, paste and undo work everywhere in the app (they're in the **Edit** menu).
+
+This works during a recording too: new lines keep arriving at the end while you fix earlier ones. Each change is saved to the lecture's `.md` file when you leave the line, and the slides stay matched to their lines. Editing is off only while slides are being made.
 
 ### Slide tools
 
@@ -53,6 +59,7 @@ Rebuild deck, Review cards and Undo last are in the **▾** menu next to Make sl
 
 ### Settings
 
+- **Slide style.** Choose density (minimal, balanced, detailed), title style (statement, topic or question), how points are phrased, how long the notes are, and whether to favour diagrams or text. Add your own rules too. Claude makes three sample slides from about three minutes of your latest lecture (or a built-in sample lecture), so you see the result before a real lecture. Type what you'd change ("shorter titles", "always include the professor's examples"): the samples are made again and the request is saved as a rule. The style applies to every slide made afterwards.
 - **Slide language.** This sets the language of slides, notes and review cards. By default it follows the lecture's language, so you can transcribe a lecture in one language and study it in another.
 - **Theme.** Themes set the colours and fonts of the slides, the exported decks and the app window, in light and dark mode.
   - A theme is a small CSS file in `~/Library/Application Support/Transcribe Lecture/themes/` that overrides the tokens in [`src/theme/default.css`](src/theme/default.css).

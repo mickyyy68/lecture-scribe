@@ -50,6 +50,9 @@ pub enum Cmd {
     Pause,
     Resume,
     Stop,
+    /// A hand edit to a transcript line (see `slides::edit_body`). Goes through the engine so
+    /// the lecture being recorded, which lives in memory, gets it too.
+    EditLine { path: PathBuf, op: String, i: usize, text: String },
     Shutdown,
 }
 
@@ -66,6 +69,7 @@ pub enum Event {
     Error { message: String },
     Saved { transcript: String, audio: Option<String> },
     Autosaved { path: String },
+    LineEdited { path: String, lines: serde_json::Value },
 }
 
 pub type Emit = Box<dyn Fn(Event) + Send>;
@@ -186,8 +190,29 @@ impl Worker {
             Cmd::Pause => self.pause(),
             Cmd::Resume => self.resume(),
             Cmd::Stop => self.stop(),
+            Cmd::EditLine { path, op, i, text } => {
+                if let Err(e) = self.edit_line(&path, &op, i, &text) {
+                    (self.emit)(Event::Error { message: e });
+                }
+            }
             Cmd::Shutdown => unreachable!(),
         }
+    }
+
+    fn edit_line(&mut self, path: &Path, op: &str, i: usize, text: &str) -> Result<(), String> {
+        let ev = match self.rec.as_mut().filter(|r| r.transcript_path == path) {
+            Some(r) => {
+                if let Some((body, shift)) = crate::slides::edit_body(&r.body, op, i, text)? {
+                    r.body = body;
+                    write_atomic(&r.transcript_path, &r.body).map_err(|e| format!("Could not save transcript: {e}"))?;
+                    crate::slides::shift_deck(path, i, shift)?;
+                }
+                crate::slides::lines_payload(&r.body)
+            }
+            None => crate::slides::edit_line(path, op, i, text)?["lines"].take(),
+        };
+        (self.emit)(Event::LineEdited { path: path.to_string_lossy().to_string(), lines: ev });
+        Ok(())
     }
 
     fn start(&mut self, o: StartOpts) -> Result<(), String> {

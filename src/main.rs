@@ -47,6 +47,10 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     // Claude Code starts this to search the course PDFs (see slides::run_claude). Nothing else
     // may write to stdout here, so it runs before the transcription engine is set up.
+    // For the UI tests (tests/ui): the exact page the window shows.
+    if args.iter().any(|a| a == "--dump-ui") {
+        return print!("{}", ui());
+    }
     if args.iter().any(|a| a == "--mcp-material") {
         let course = args.iter().position(|a| a == "--course").and_then(|j| args.get(j + 1)).cloned().unwrap_or_default();
         return material::serve_mcp(&course);
@@ -117,11 +121,16 @@ fn main() {
 
     let emit_proxy = proxy.clone();
     let mut engine = engine::spawn(Box::new(move |e: Event| {
+        // "recording", "paused" or "idle", for scripts/install.sh: never replace the app mid-lecture.
+        if let Event::State { state, .. } = &e {
+            let _ = std::fs::write(paths::data_dir().join("state"), state);
+        }
         if let Ok(s) = serde_json::to_string(&e) {
             let _ = emit_proxy.send_event(s);
         }
     }));
     let tx = engine.tx.clone();
+    let _ = std::fs::write(paths::data_dir().join("state"), "idle"); // none left from a crash
 
     let window = WindowBuilder::new()
         .with_title(paths::APP_NAME)
@@ -235,6 +244,10 @@ fn main() {
                         let _ = proxy.send_event(ev.to_string());
                     });
                 }
+                "lineEdit" => {
+                    let i = msg["i"].as_u64().unwrap_or(u64::MAX) as usize;
+                    let _ = tx.send(Cmd::EditLine { path: PathBuf::from(s("path")), op: s("op"), i, text: s("text") });
+                }
                 "loadTranscript" => {
                     let ev = slides::transcript_payload(&PathBuf::from(s("path")))
                         .unwrap_or_else(|e| json!({ "type": "error", "message": e }));
@@ -313,6 +326,18 @@ fn main() {
                         let _ = proxy.send_event(json!({ "type": "claudeCheck", "found": version.is_some(), "version": version }).to_string());
                     });
                 }
+                // Slide style page: three sample slides in the chosen style (and, with feedback, the
+                // student's own rules rewritten to include it).
+                "styleSample" => {
+                    let proxy = ipc_proxy.clone();
+                    let (course, model, effort, lang, feedback) = (s("course"), s("model"), s("effort"), s("lang"), s("feedback"));
+                    let (style, previous, builtin) = (msg["style"].clone(), msg["previous"].clone(), msg["builtin"].as_bool() == Some(true));
+                    std::thread::spawn(move || {
+                        let r = slides::sample(&out_dir(), builtin, &course, &model, &effort, &lang, &style, &feedback, &previous);
+                        let ev = r.unwrap_or_else(|e| json!({ "type": "styleError", "message": e }));
+                        let _ = proxy.send_event(ev.to_string());
+                    });
+                }
                 "saveSettings" => {
                     let p = paths::settings_path();
                     let _ = std::fs::create_dir_all(p.parent().unwrap());
@@ -324,9 +349,12 @@ fn main() {
         .build(&window)
         .expect("webview");
 
+    let menu = app_menu();
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
+            // NSApp exists from here on: the menu bar gives text fields Cmd-C/V/X/A/Z.
+            TaoEvent::NewEvents(tao::event::StartCause::Init) => menu.init_for_nsapp(),
             TaoEvent::UserEvent(js) => {
                 let _ = webview.evaluate_script(&format!("window.onEngine({js})"));
             }
@@ -334,9 +362,31 @@ fn main() {
                 engine.shutdown(); // finishes and saves any running recording
                 *control_flow = ControlFlow::Exit;
             }
+            // Quit from the menu or Dock (Cmd-Q) skips CloseRequested: save the recording here too.
+            TaoEvent::LoopDestroyed => engine.shutdown(),
             _ => {}
         }
     });
+}
+
+/// The menu bar. Without an Edit menu, macOS doesn't send Cut, Copy, Paste, Select All and
+/// Undo to the page, so their shortcuts would do nothing in text fields and transcript lines.
+fn app_menu() -> muda::Menu {
+    use muda::{Menu, PredefinedMenuItem as P, Submenu};
+    let menu = Menu::new();
+    let app = Submenu::with_items(paths::APP_NAME, true, &[
+        &P::about(None, None), &P::separator(), &P::services(None), &P::separator(),
+        &P::hide(None), &P::hide_others(None), &P::show_all(None), &P::separator(), &P::quit(None),
+    ]);
+    let edit = Submenu::with_items("Edit", true, &[
+        &P::undo(None), &P::redo(None), &P::separator(),
+        &P::cut(None), &P::copy(None), &P::paste(None), &P::select_all(None),
+    ]);
+    let window = Submenu::with_items("Window", true, &[&P::minimize(None), &P::fullscreen(None), &P::separator(), &P::close_window(None)]);
+    for m in [app, edit, window].into_iter().flatten() {
+        let _ = menu.append(&m);
+    }
+    menu
 }
 
 /// The macOS file picker, through AppleScript (no extra dependencies). Empty if cancelled.

@@ -9,8 +9,8 @@ People record real lectures with the installed app, and a lost recording can't b
 - **Never quit, kill, relaunch or reinstall the app** unless the user says no lecture is being recorded.
   - Check first with `pgrep -fl "Transcribe Lecture.app|Lecture Scribe.app"`.
   - "Lecture Scribe" is the app's old name, and that build may still be installed and running.
-- **`./bundle.sh --install` replaces `~/Applications/Transcribe Lecture.app`.** Run it only when the user asks to install. It refuses while the app is open.
-- Plain `./bundle.sh` only builds `target/Transcribe Lecture.app`.
+- **Install with `scripts/install.sh`, only when the user asks to install or restart.** It builds, and if the app is open it quits it (the app saves on quit) and starts the new one. It refuses, changing nothing, while the app is recording or paused: the app writes its state to `<data dir>/state`. Don't quit or reinstall the app any other way.
+- `./bundle.sh` only builds `target/Transcribe Lecture.app` (`--install` copies it but refuses while the app is open).
 - While a lecture may be recording, build with `nice` and `-j 2` so transcription isn't starved:
 
   ```sh
@@ -24,14 +24,15 @@ People record real lectures with the installed app, and a lost recording can't b
 
 | File | What |
 |---|---|
-| `src/engine.rs` | Recording worker: utterance splitting, Parakeet calls, live partials, Continue (appending to an existing transcript and WAV). Rewrites the transcript `.md` atomically on every change. Applies glossary corrections. |
+| `src/engine.rs` | Recording worker (hand edits to the lecture being recorded go through it: `Cmd::EditLine`): utterance splitting, Parakeet calls, live partials, Continue (appending to an existing transcript and WAV). Rewrites the transcript `.md` atomically on every change. Applies glossary corrections. |
 | `src/audio.rs` | cpal mic capture and resampling to 16 kHz mono. |
 | `src/models.rs` | Parakeet V3 only: finds it (`<data dir>/models`, Handy's folder, HF cache) and downloads it (curl, resumable, SHA-256 checked). |
 | `src/paths.rs` | Data folder, transcripts folder, settings. |
-| `src/main.rs` | Window, IPC commands from `ui.html`, headless CLI modes. |
+| `src/main.rs` | Window, menu bar, IPC commands from `ui.html`, headless CLI modes. |
 | `src/ui.html` | The whole UI: transcript on the left, slide panel on the right, the glossary/PDF and Settings panels, and the first-run setup (`#setup`, shown until `settings.onboarded`). Plain HTML/JS, no build step. Write menus as plain `<select>`: `Picker` turns every select into the themed picker and keeps the `<select>` as the source of truth (`.value`, options, `onchange`). |
 | `src/slides.rs` | `run_claude` and the shared `claude_command`, deck storage, fact check and HTML export. |
-| `src/slides_prompt.txt`, `src/slides_prompt_material.txt` | The system prompt, in English. `{course}` and `{language}` are filled in per request. The second file is appended only when the course has PDFs. |
+| `src/slides_prompt.txt`, `src/slides_prompt_material.txt` | The system prompt, in English. `{course}` and `{language}` are filled in per request. The second file is appended only when the course has PDFs. `slides::style_rules` appends the student's slide style (`settings.style`) as a STYLE section; each control's default adds nothing, so keep the defaults in `style_rules` and `STYLE` in `ui.html` in sync. |
+| `src/sample_lecture.md` | Built-in English transcript excerpt for the Slide style page's samples (`slides::sample`) when there's no lecture yet. |
 | `src/slides.js`, `src/slides.css` | Slide renderer. **Shared** by `ui.html` and the exported deck, so changes must work in both. Fixed labels ("Definition", "sketch", …) come from `LABELS`, keyed by `<html lang>`, with English as the fallback. |
 | `src/deck.html` | Template of the exported `<lecture> · Slide.html` (present/print). |
 | `src/theme/base.css` | Slide structure (`.pr-*` classes and the type scale). Uses tokens only, never literal colours or fonts. |
@@ -66,6 +67,7 @@ People record real lectures with the installed app, and a lost recording can't b
   - `review: true` batches hold the review cards. The latest one replaces earlier ones. They are always shown after the lecture slides, and they keep `to_line` at the previous mark so they don't consume new lines.
   - `lang` is the slides' ISO language code.
   - Undo pops the last batch. Keep these semantics backward compatible.
+  - Batches point at transcript lines by index (`from_line`, `to_line`). Hand edits (`slides::edit_body`) that add or remove a line call `slides::shift_deck` to move those indices.
 - **Data folder** `paths::data_dir()`, which is `~/Library/Application Support/Transcribe Lecture/`.
   - It falls back to the legacy `…/Lecture Scribe/` when only that one exists. Keep the fallback.
   - It holds `settings.json` and `themes/<name>.css`.
@@ -96,20 +98,32 @@ People record real lectures with the installed app, and a lost recording can't b
 
 ## Testing
 
-- Unit tests: `cargo test --release --lib`.
+**Run `scripts/verify.sh` before saying a change works.** About 25 s, and safe while a lecture is recording (low priority; it never touches the installed app, the user's lectures or settings). `--quick` skips the engine tests; `--ui NAME` runs only matching UI tests.
+
+It runs:
+- **Release build with no warnings** (`--all-targets`) and **unit tests** (`cargo test --release --lib`).
+- **UI script syntax**: `node --check` on the largest `<script>` of `ui.html`.
+- **UI tests in WebKit** (`tests/ui/`): `transcribe-lecture --dump-ui` prints the exact page the window shows; `tests/ui/runner.swift` loads it in a WKWebView (the engine the app uses, unlike Chrome) and drives it with **real AppKit mouse and key events**, so a click only counts if mouse down and up land on the same element, as for the user. `prelude.js` plays the Rust side: a fake lecture, the `init`/`slides`/`lineEdited` replies, and a record of every IPC command (`T.sent(cmd)`). It also fails any test where the page calls `confirm`/`alert`/`prompt`, which silently do nothing in wry. Tests are `T.test(name, async fn)` in `tests/ui/*.test.js`, each on a fresh page; `T.shot(name)` writes `target/ui-test/shots/<name>.png`. **Look at the screenshots** of anything visual you changed.
+- **Engine tests** (`tests/engine.rs`, `#[ignore]`d because they need the Parakeet model): real transcription of speech made with `say`, hand edits during a recording, and Continue.
+
+When you fix a bug, add the test that would have caught it, and see it fail before the fix. Cover user-visible UI behaviour through `T.click`/`T.type`/`T.key`, not by calling page functions.
+
+Not covered by `verify.sh`, so check by hand (or tell the user it's unchecked):
+- The menu bar (Cmd-C/V/X/A/Z come from `main.rs::app_menu`), microphone capture, and anything else outside the page.
 - Slide rendering: fill `src/deck.html` with sample slides and screenshot it with headless Chrome (`--headless=new --screenshot`). Check light and dark, the default theme and a custom one, and `{{LANG}}` set to `en` and to another language.
-- UI script syntax: extract the largest `<script>` from `src/ui.html`, drop the `/*SLIDES_JS*/` placeholder, then run `node --check` on it.
+
+Headless modes of `target/release/transcribe-lecture`:
 - `--simulate file.wav [--model path.gguf] [--lang it] [--speed N] [--course X] [--continue file.md]` runs the engine on a WAV and writes to a temp dir. With `--continue`, run it on a **copy**.
 - `--slides file.md [--course X] [--lang xx] [--rebuild | --review] [--model haiku] [--effort low]` makes a **real** Claude Code call on the user's subscription quota, and it writes the deck next to the transcript. Run it only on a **copy** in `/tmp`, never on files in `~/Documents/Lecture Transcripts`.
 - `--download-model` downloads 740 MB into the data folder. To test it without touching the user's copy, run it with `HOME` set to a throwaway folder.
 - `--make-theme NAME DESCRIPTION` makes a real Claude call and writes into the user's themes folder. Delete test themes afterwards.
 - `--add-pdf file.pdf --course X` writes course material. Use a throwaway course name, and delete its `glossary/` and `material/` entries afterwards.
+- `--dump-ui` prints the page (for the UI tests).
 - After a prompt change, run `--slides` on a copied lecture and read the result: slide titles, language, the `(?)` count, `usage` and `lookups`.
 
 ## Done means
 
-- `cargo build` is clean, with no warnings, and `cargo test --lib` passes.
-- If you touched `ui.html`, the UI script syntax check passes.
+- `scripts/verify.sh` passes (all of it, not `--quick`, if you touched the engine), and new behaviour has a test.
 - Any change to the slide pipeline is verified on a copied transcript.
 - `README.md` is updated for user-visible changes.
-- Nothing is installed unless the user asked.
+- Nothing is installed unless the user asked; then use `scripts/install.sh`.
