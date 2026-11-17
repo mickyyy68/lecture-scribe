@@ -41,3 +41,23 @@ T.test("re-rendering leaves every button's content alone", async () => {
   const changed = buttons.filter((b, i) => b.childNodes.length !== before[i].length || [...b.childNodes].some((n, j) => n !== before[i][j]));
   T.eq(changed.map((b) => b.id || b.textContent), [], "buttons whose content was replaced");
 });
+
+// The Slides tab's capsule: the slide list menu jumps to a slide, Present opens the deck.
+T.test("the slide menu lists the deck and jumps to a slide; Present opens it", async () => {
+  await T.open();
+  const s = (title, from) => ({ title, from, left: [{ type: "list", items: ["Take the gradient", "Step the other way"] }], notes: "" });
+  T.fire({ type: "slides", path: T.PATH, title: "Test Lecture", lines: 8, done: 5, lang: "en", html: "/tmp/deck.html", flagged: 0, lookups: [],
+    usage: { model: "sonnet", effort: "low", prompt: 1, cached: 0, output: 1 },
+    slides: [s("Gradient descent", "00:00:00"), s("The **learning rate**", "00:00:22"), s("Mini-batches", "00:00:49")] });
+  await T.until(() => $("slideCount").textContent === "3 slides", "the capsule counts the slides");
+  T.eq($("slidesNew").textContent, "· 3 new lines");
+  await T.shot("slides-capsule");
+  await T.click("#slideMenuBtn");
+  T.eq([...$("slideMenu").querySelectorAll("button .t")].map((e) => e.textContent), ["Gradient descent", "The learning rate", "Mini-batches"]);
+  T.ok(/3 new lines since last time/.test($("slidesNote").textContent), $("slidesNote").textContent);
+  await T.shot("slides-menu");
+  await T.click('#slideMenu [data-i="2"]');
+  T.ok(!$("slideMenu").classList.contains("open"), "the menu closes");
+  await T.click("#presentBtn");
+  T.eq(T.sent("open").map((m) => m.path), ["/tmp/deck.html"]);
+});

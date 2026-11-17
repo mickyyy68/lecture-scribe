@@ -29,7 +29,7 @@ People record real lectures with the installed app, and a lost recording can't b
 | `src/models.rs` | Parakeet V3 only: finds it (`<data dir>/models`, Handy's folder, HF cache) and downloads it (curl, resumable, SHA-256 checked). |
 | `src/paths.rs` | Data folder, transcripts folder, settings. |
 | `src/main.rs` | Window, menu bar, IPC commands from `ui.html`, headless CLI modes. |
-| `src/ui.html` | The whole UI: transcript on the left, slide panel on the right, the glossary/PDF and Settings panels, and the first-run setup (`#setup`, shown until `settings.onboarded`). Plain HTML/JS, no build step. Write menus as plain `<select>`: `Picker` turns every select into the themed picker and keeps the `<select>` as the source of truth (`.value`, options, `onchange`). |
+| `src/ui.html` | The whole UI: transcript on the left; on the right a card (`#card`) with the Slides and Docs tabs, the capsule at its bottom that holds the tab's actions (it becomes the composer for a suggestion, and the progress with Stop while Claude works; see "the right side" in the script), the ⋯ menu, and the Glossary/PDF and Settings sheets over the card; and the first-run setup (`#setup`, shown until `settings.onboarded`). Plain HTML/JS, no build step. Write menus as plain `<select>`: `Picker` turns every select into the themed picker and keeps the `<select>` as the source of truth (`.value`, options, `onchange`). |
 | `src/slides.rs` | `run_claude` and the shared `claude_command`, deck storage, fact check and HTML export. |
 | `src/slides_prompt.txt`, `src/slides_prompt_material.txt` | The system prompt, in English. `{course}` and `{language}` are filled in per request. The second file is appended only when the course has PDFs. `slides::style_rules` appends the student's slide style (`settings.style`) as a STYLE section; each control's default adds nothing, so keep the defaults in `style_rules` and `STYLE` in `ui.html` in sync. |
 | `src/sample_lecture.md` | Built-in English transcript excerpt for the Slide style page's samples (`slides::sample`) when there's no lecture yet. |
@@ -51,6 +51,7 @@ People record real lectures with the installed app, and a lost recording can't b
 ## Themes
 
 - A theme sets CSS custom properties only, in `:root` and `[data-theme="dark"]`.
+- The app chrome's corners are tokens too (`--radius-panel`, `--radius-pill`, `--radius-menu`, `--radius-group`, `--radius-control`), so a theme can square them.
 - If you add a token, give it a value in `default.css` and use it in `base.css`, `slides.css` or `ui.html`. Existing user themes don't define it, so they keep the default.
 - Don't put literal colours or fonts in `base.css`, `slides.css` or the `ui.html` chrome. A theme couldn't change them.
 - `theme::validate` rejects any answer containing `<`, so a theme can't break out of its `<style>` element. Keep that check.
@@ -96,7 +97,8 @@ People record real lectures with the installed app, and a lost recording can't b
   - Course PDFs may only be used to correct spelling, follow naming and cite pages, never to add content.
   - `fact_check` marks unverifiable spans with "(?)". `attach_refs` keeps only pages the model actually saw.
   - Don't weaken these.
-- The student's free-text suggestion (`hint`: Make slides, Draft notes) goes in the per-call tail, after the transcript, and the prompt says fidelity comes first.
+- **Stop**: main.rs runs each Claude job inside `slides::job("slides" | "draft" | "check", …)`; `run_claude` records its claude process for the thread's job, and the page's `cancel` command kills it. The job then reports `slides::STOPPED` ("Stopped."), which the page shows as a stop, not an error. Run any new Claude job the same way.
+- The student's free-text suggestion (`hint`: Make slides, Rebuild, Review cards, Draft notes; typed in the composer) goes in the per-call tail, after the transcript, and the prompt says fidelity comes first.
 - Model output is normalised before saving: a single block in `left`/`right` becomes a list. `slides.js` also tolerates the old form, for old decks.
 - Parakeet V3 has no vocabulary biasing. The glossary is post-correction of the text, not a model hint.
 

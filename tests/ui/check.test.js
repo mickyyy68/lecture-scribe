@@ -17,7 +17,7 @@ async function checked(extra) {
 }
 const edits = () => T.sent("lineEdit").map((m) => [m.i, m.text]);
 
-T.test("Check transcript in the ▾ menu asks Claude and shows progress in Glossary", async () => {
+T.test("Check transcript in the ⋯ menu asks Claude and shows progress in Glossary, with Stop", async () => {
   await T.open();
   await T.click("#moreBtn");
   await T.click("#checkBtn");
@@ -25,6 +25,12 @@ T.test("Check transcript in the ▾ menu asks Claude and shows progress in Gloss
   T.ok($("glossView").style.display !== "none", "Glossary tab open");
   T.ok(/reading the transcript/.test($("glossView").textContent), "progress shown");
   T.ok($("checkBtn").disabled, "can't start a second check meanwhile");
+  T.ok($("moreBtn").classList.contains("badge"), "a dot on ⋯ while it runs");
+  await T.click("#ckStop");
+  T.eq(T.sent("cancel").map((m) => m.kind), ["check"]);
+  T.fire({ type: "checkError", path: T.PATH, message: "Stopped." });
+  await T.until(() => $("ckStart"), "back to the start");
+  T.ok(!document.querySelector(".toast.err") && !$("checkBtn").disabled, "not an error; can check again");
 });
 
 T.test("fixes are shown as a word diff, and their lines are marked", async () => {
