@@ -24,7 +24,7 @@ People record real lectures with the installed app, and a lost recording can't b
 
 | File | What |
 |---|---|
-| `src/engine.rs` | Recording worker (hand edits to the lecture being recorded go through it: `Cmd::EditLine`): utterance splitting, Parakeet calls, live partials, Continue (appending to an existing transcript and WAV). Rewrites the transcript `.md` atomically on every change. Applies glossary corrections. |
+| `src/engine.rs` | Recording worker (hand edits to the lecture being recorded go through it: `Cmd::EditLine`; so does Rename, `Cmd::Rename` → `rename_lecture`, refused while recording, which moves all of a lecture's files: `lecture_files`): utterance splitting, Parakeet calls, live partials, Continue (appending to an existing transcript and WAV). Rewrites the transcript `.md` atomically on every change. Applies glossary corrections. |
 | `src/audio.rs` | cpal mic capture and resampling to 16 kHz mono. |
 | `src/models.rs` | Parakeet V3 only: finds it (`<data dir>/models`, Handy's folder, HF cache) and downloads it (curl, resumable, SHA-256 checked). |
 | `src/paths.rs` | Data folder, transcripts folder, settings. |
@@ -79,6 +79,7 @@ Two separate sets of tokens:
   - `lang` is the slides' ISO language code.
   - Undo pops the last batch. Keep these semantics backward compatible.
   - Batches point at transcript lines by index (`from_line`, `to_line`). Hand edits (`slides::edit_body`) that add or remove a line call `slides::shift_deck` to move those indices.
+- A lecture's files share its stem: `<stem>.md`, `.wav`, ` · Slide.json`, ` · Slide.html`, ` · Docs/` (`engine::lecture_files`). Add a new per-lecture file there too, or Rename leaves it behind. Titles in file names go through `engine::file_title` (no `·`, which marks a lecture's own files).
 - **Docs** `<lecture> · Docs/<name>.md` plus `images/`. Plain Markdown that other editors open: GitHub tables, `$…$`/`$$…$$`, ```` ```chart ```` blocks holding one slide diagram block as JSON, time links `[mm:ss](#t=hh:mm:ss)`. A doc loaded and saved without edits must come back byte for byte (the "every block type" UI test).
 - **Data folder** `paths::data_dir()`, which is `~/Library/Application Support/Transcribe Lecture/`.
   - It falls back to the legacy `…/Lecture Scribe/` when only that one exists. Keep the fallback.

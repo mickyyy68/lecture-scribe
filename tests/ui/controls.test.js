@@ -191,3 +191,56 @@ T.test("with no lecture open the name is a field; New lecture gets back to one",
   await T.click("#startBtn");
   T.eq(T.sent("start").map((m) => [m.title, m.continue]), [["Week 3", undefined]]);
 });
+
+// Rename (in the lecture picker): the name becomes a field; Enter renames the lecture and its files.
+T.test("Rename in the lecture picker renames the open lecture and keeps its doc open", async () => {
+  T.addDoc("Notes", "Hello\n");
+  await T.openDocs();
+  const doc = Docs.doc;
+  await T.click("#title");
+  T.ok($("lecRename").style.display !== "none" && !$("lecRename").disabled, "Rename is offered for the open lecture");
+  await T.shot("lecture-picker-rename");
+  await T.click("#lecRename");
+  T.ok(!$("lecMenu").classList.contains("open") && !$("title").readOnly && document.activeElement === $("title"), "the name is a field, focused");
+  T.eq([$("title").selectionStart, $("title").selectionEnd], [0, "Test Lecture".length], "with the old name selected");
+  await T.type("Gradient descent");
+  await T.shot("renaming");
+  await T.key("Enter");
+  T.eq(T.sent("renameLecture").map((m) => [m.path, m.title]), [[T.PATH, "Gradient descent"]]);
+  const to = T.PATH.replace(/[^/]*$/, "Gradient descent.md");
+  await T.until(() => $("lecFile").textContent === "Gradient descent", "the file's new name");
+  T.ok($("title").readOnly && $("title").value === "Gradient descent", "back to the picker, with the new name");
+  T.eq(Docs.doc, doc.replace("Test Lecture · Docs", "Gradient descent · Docs"), "the open doc stays open, in the renamed folder");
+  T.eq(T.sent("loadTranscript"), [], "the lecture isn't reloaded");
+  T.eq(T.sent("slidesState").at(-1).path, to, "the slides follow the new path");
+  T.eq(T.$("#segs").children.length, T.LINES.length, "the lines stay");
+  await T.click("#title");
+  await T.until(() => document.querySelector("#lecList button .t")?.textContent === "Gradient descent", "the picker lists the new name");
+  // Later edits and Continue use the new path.
+  await T.key("Escape");
+  await T.click("#contBtn"); await T.click("#askYes");
+  T.eq(T.sent("start").map((m) => m.continue), [to]);
+});
+
+T.test("Escape, an empty name or a failed rename keep the old name", async () => {
+  await T.open();
+  const rename = async (text, key) => { await T.click("#title"); await T.click("#lecRename"); if (text != null) await T.type(text); await T.key(key); };
+  await rename("Something else", "Escape");
+  T.ok($("title").value === "Test Lecture" && $("title").readOnly, "Escape: unchanged");
+  await rename(null, "Backspace"); await T.key("Enter");
+  T.eq($("title").value, "Test Lecture", "an empty name: unchanged");
+  await rename("Test Lecture", "Enter");
+  T.eq(T.sent("renameLecture"), [], "nothing sent when nothing changed");
+  await rename("Fail", "Enter");
+  await T.until(() => /Permission denied/.test(document.body.textContent), "the error is shown");
+  T.eq([$("title").value, $("lecFile").textContent], ["Test Lecture", "Test Lecture"], "the old name is back");
+});
+
+T.test("Rename isn't offered without a lecture, nor while recording", async () => {
+  await T.click("#lecBtn");
+  T.eq($("lecRename").style.display, "none", "no lecture open: no Rename");
+  await T.key("Escape");
+  await T.open(); T.record();
+  await T.click("#lecBtn");
+  T.ok($("lecRename").disabled && /Stop the recording/.test($("lecRename").title), "disabled while recording");
+});

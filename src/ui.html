@@ -23,6 +23,7 @@
   #lecName { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; max-width: 55%; margin-left: -8px; padding: 0 0 0 8px; border-radius: var(--app-r-md); }
   #lecName.pick, #lecName.pick #title { cursor: pointer; }
   #lecName.pick:hover, #lecName.open { background: var(--app-hover); }
+  #lecName.renaming { background: var(--app-surface); box-shadow: 0 0 0 2px var(--app-accent-soft), inset 0 0 0 1px var(--app-accent); }
   #lecName #lecBtn { border: none; background: transparent; padding: 6px 8px 6px 2px; }
   #lecName.pick #lecBtn, #lecName.open #lecBtn { color: var(--app-fg); }
   #title { flex: 0 1 auto; min-width: 120px; max-width: 100%; text-overflow: ellipsis; font: 700 var(--app-title) var(--app-font); letter-spacing: -0.01em; border: none; background: transparent;
@@ -493,6 +494,7 @@
     <div id="lecList" role="listbox"></div>
     <hr>
     <button id="lecNew"><svg class="ic"><use href="#i-plus"/></svg><span class="t">New lecture</span><span class="k">name it, then press Start</span></button>
+    <button id="lecRename"><svg class="ic"><use href="#i-pen"/></svg><span class="t">Rename…</span><span class="k">the lecture and its files</span></button>
     <div class="lm-info"><span id="lecFile">No lecture open</span><span id="words">0 words</span><span id="saved"></span><a id="lecReveal">Show in Finder</a></div>
   </div>
   <div class="pop" id="recMenu">
@@ -1296,7 +1298,7 @@ function headerMenu(menu, btn, right, fill) {
 $("recSetBtn").onclick = () => headerMenu($("recMenu"), $("recSetBtn"), true);
 
 /* ---------- the lecture picker (top left): past lectures, newest first, with a search ---------- */
-let recentList = [], lecAct = -1;
+let recentList = [], lecAct = -1, renameOld = null, renameSent = null; // renameOld: the name while it's being renamed
 // "2026-11-17 09.28 Networks" → { title: "Networks", when: "Today, 09:28" }
 function lecParts(name) {
   const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2})\.(\d{2}) (.*)$/.exec(name);
@@ -1324,6 +1326,8 @@ function fillLecMenu() {
   const items = recentList.map((x) => ({ ...x, ...lecParts(x.name) }))
     .filter((x) => words.every((w) => (x.title + " " + x.when + " " + x.name).toLowerCase().includes(w)));
   const L = $("lecList"); L.textContent = ""; $("lecNew").disabled = busy;
+  const rn = $("lecRename"), why = renameBlock();
+  rn.style.display = curPath ? "" : "none"; rn.disabled = !!why; rn.title = why;
   if (busy && items.length) L.insertAdjacentHTML("beforeend", '<div class="note">Stop the recording to open another lecture.</div>');
   for (const x of items) {
     const b = document.createElement("button");
@@ -1356,11 +1360,14 @@ function openLecMenu() {
   $("lecFilter").value = "";
   if (headerMenu($("lecMenu"), $("lecName"), false, fillLecMenu)) { send("recentList"); $("lecFilter").focus(); }
 }
-// Read-only (a picker) while a lecture is open or recording; a field for a new lecture's name.
+// Read-only (a picker) while a lecture is open or recording; a field for a new lecture's name,
+// or while the open one is being renamed.
 function renderLecName(p = curPath) {
-  const pick = !!p || state !== "idle", t = $("title");
+  if (renameOld != null && state !== "idle") return endRename(false);
+  const pick = (!!p || state !== "idle") && renameOld == null, t = $("title");
   if (t.readOnly === pick && $("lecName").classList.contains("pick") === pick) return;
   t.readOnly = pick; t.tabIndex = pick ? -1 : 0; $("lecName").classList.toggle("pick", pick);
+  $("lecName").classList.toggle("renaming", renameOld != null);
   $("lecName").title = pick ? "Open a lecture (⌘O)" : "";
   t.placeholder = pick ? "Untitled lecture" : "Lecture title (e.g. Networks – DHCP)";
   if (pick && document.activeElement === t) t.blur();
@@ -1379,6 +1386,38 @@ $("lecNew").onclick = () => {
   $("title").value = ""; $("empty").style.display = "";
   render(); $("title").focus();
 };
+// Rename: the name in the header becomes a field; Enter (or clicking away) renames the lecture
+// and its files, Escape keeps the old name.
+function renameBlock() {
+  if (!curPath) return "Open a lecture to rename it";
+  if (state !== "idle") return "Stop the recording to rename the lecture";
+  if (slidesBusy || check?.busy || draftBusy()) return "Wait for Claude to finish to rename the lecture";
+  return "";
+}
+function startRename() {
+  if (renameBlock()) return;
+  closePops();
+  const t = $("title"); renameOld = t.value;
+  renderLecName(); t.focus(); t.select();
+}
+function endRename(save) {
+  if (renameOld == null) return;
+  const t = $("title"), v = t.value.trim().replace(/\s+/g, " "), old = renameOld;
+  renameOld = null;
+  if (save && v && v !== old && curPath && !renameBlock()) {
+    t.value = v; renameSent = old;
+    Docs.saveNow(); // under the old name, before the files move
+    send("renameLecture", { path: curPath, title: v });
+  } else t.value = old;
+  renderLecName();
+}
+$("lecRename").onclick = startRename;
+$("title").addEventListener("keydown", (e) => {
+  if (renameOld == null) return;
+  if (e.key === "Enter") { e.preventDefault(); endRename(true); }
+  else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); endRename(false); }
+});
+$("title").addEventListener("blur", () => endRename(true));
 $("lecFilter").oninput = fillLecMenu;
 $("lecFilter").onkeydown = (e) => {
   const n = lecRows().length;
@@ -1591,6 +1630,23 @@ window.onEngine = (e) => {
     case "notice": toast(e.message); break;
     case "error": toast(e.message, true); break;
     case "recent": recentList = e.recent || []; if ($("lecMenu").classList.contains("open")) fillLecMenu(); break;
+    case "renamed": {
+      const here = curPath === e.from;
+      if (e.error) {
+        toast(e.error, true);
+        if (here && renameSent != null && renameOld == null) { $("title").value = renameSent; fitTitle(); }
+        renameSent = null; break;
+      }
+      renameSent = null; recentList = e.recent || recentList;
+      if (!here) break;
+      curPath = e.path; // same lecture, same lines: only its paths change
+      if (renameOld == null) { $("title").value = e.title === "Lecture" ? "" : e.title; fitTitle(); }
+      showFile(e.path, "Renamed");
+      if (check?.path === e.from) check.path = e.path;
+      Docs.moved(e.from, e.path);
+      send("slidesState", { path: e.path }); // no toast: the header shows the new name
+      break;
+    }
     case "autosaved": {
       setCurPath(e.path);
       showFile(e.path, "Autosaved " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));

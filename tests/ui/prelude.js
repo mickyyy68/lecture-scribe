@@ -30,7 +30,7 @@
   const freeDoc = (name) => { for (let n = 1; ; n++) { const p = `${DOCDIR}/${name}${n > 1 ? " " + n : ""}.md`; if (!docs[p]) return p; } };
   let lines = LINES.map((l) => [...l]);
   const fire = (e) => setTimeout(() => window.onEngine(e), 0);
-  const slidesState = () => ({ type: "slides", path: PATH, title: "Test Lecture", lines: lines.length, done: 0, slides: [], lang: "en", usage: null, flagged: 0, lookups: [] });
+  const slidesState = (path = PATH) => ({ type: "slides", path, title: "Test Lecture", lines: lines.length, done: 0, slides: [], lang: "en", usage: null, flagged: 0, lookups: [] });
 
   addEventListener("error", (e) => errors.push(e.message));
   addEventListener("unhandledrejection", (e) => errors.push(String(e.reason)));
@@ -49,7 +49,16 @@
         break;
       case "recentList": fire({ type: "recent", recent: RECENT }); break;
       case "preload": fire({ type: "modelReady", path: m.model, ms: 1 }); break;
-      case "slidesState": fire(slidesState()); break;
+      case "slidesState": fire(slidesState(m.path)); break;
+      // What engine::rename_lecture does: the files move, docs included (a title "Fail" fails).
+      case "renameLecture": {
+        if (m.title === "Fail") { fire({ type: "renamed", from: m.path, error: "Couldn't rename Test Lecture.wav: Permission denied" }); break; }
+        const to = m.path.replace(/[^/]*$/, m.title + ".md"), a = m.path.replace(/\.md$/, " · Docs/"), b = to.replace(/\.md$/, " · Docs/");
+        for (const k of Object.keys(docs)) if (k.startsWith(a)) { docs[b + k.slice(a.length)] = docs[k]; delete docs[k]; }
+        for (const x of RECENT) if (x.path === m.path) Object.assign(x, { name: "2026-11-17 10.02 " + m.title, path: to });
+        fire({ type: "renamed", from: m.path, path: to, title: m.title, lines: lines.map((l) => [...l]), recent: RECENT });
+        break;
+      }
       case "docsList": fire({ type: "docs", path: m.path, docs: docList(), open: null }); break;
       case "docRead": fire({ type: "doc", path: m.path, doc: m.doc, name: m.doc.split("/").pop().replace(/\.md$/, ""), md: docs[m.doc].md, images: docs[m.doc].images || {} }); break;
       case "docSave": docs[m.doc].md = m.md; fire({ type: "docSaved", path: m.path, doc: m.doc, seq: m.seq }); break;

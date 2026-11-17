@@ -926,6 +926,16 @@ const Docs = (() => {
     render();
     if (p) send("docsList", { path: p });
   }
+  // The lecture was renamed (its Docs folder too): the open doc stays open under its new path.
+  function moved(from, to) {
+    if (lect !== from) return;
+    const a = from.replace(/\.md$/, "") + " · Docs/", b = to.replace(/\.md$/, "") + " · Docs/";
+    const m = (p) => (p && p.startsWith(a) ? b + p.slice(a.length) : p);
+    lect = to; doc = m(doc); opening = m(opening); renaming = m(renaming);
+    list = list.map((d) => ({ ...d, path: m(d.path) }));
+    if (lastOpen[from]) { lastOpen[to] = m(lastOpen[from]); delete lastOpen[from]; }
+    send("docsList", { path: to });
+  }
   function on(e) {
     if (e.type === "docDrafted" || e.type === "docDraftError") {
       drafting = false;
@@ -984,5 +994,5 @@ const Docs = (() => {
   }
 
   bind();
-  return { bar, lecture, on, render, saveNow, fitCharts, parse, serialize, draft, get doc() { return doc; }, get drafting() { return drafting; } };
+  return { bar, lecture, moved, on, render, saveNow, fitCharts, parse, serialize, draft, get doc() { return doc; }, get drafting() { return drafting; } };
 })();

@@ -333,6 +333,32 @@ fn main() {
                 "recentList" => {
                     let _ = ipc_proxy.send_event(json!({ "type": "recent", "recent": slides::recent(&out_dir()) }).to_string());
                 }
+                // Rename: not while Claude is writing the lecture's slides, check or notes (they'd
+                // be written under the old name); the engine refuses while recording.
+                "renameLecture" => {
+                    use std::sync::atomic::Ordering;
+                    let from = s("path");
+                    let busy = [&SLIDES_BUSY, &CHECK_BUSY, &DRAFT_BUSY].iter().any(|b| b.load(Ordering::SeqCst));
+                    let reply = move |r: Result<PathBuf, String>, proxy: &tao::event_loop::EventLoopProxy<String>| {
+                        let ev = match r {
+                            Ok(p) => slides::transcript_payload(&p).map(|mut v| {
+                                v["type"] = json!("renamed");
+                                v["from"] = json!(from);
+                                v["recent"] = json!(slides::recent(&out_dir()));
+                                v
+                            }),
+                            Err(e) => Err(e),
+                        };
+                        let ev = ev.unwrap_or_else(|e| json!({ "type": "renamed", "from": from, "error": e }));
+                        let _ = proxy.send_event(ev.to_string());
+                    };
+                    if busy {
+                        reply(Err("Wait for Claude to finish before renaming the lecture.".into()), &ipc_proxy);
+                    } else {
+                        let proxy = ipc_proxy.clone();
+                        let _ = tx.send(Cmd::Rename { path: PathBuf::from(s("path")), title: s("title"), done: Box::new(move |r| reply(r, &proxy)) });
+                    }
+                }
                 "loadTranscript" => {
                     let ev = slides::transcript_payload(&PathBuf::from(s("path")))
                         .unwrap_or_else(|e| json!({ "type": "error", "message": e }));
