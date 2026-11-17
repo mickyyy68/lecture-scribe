@@ -13,7 +13,7 @@ pub const SLIDES_JS: &str = include_str!("slides.js");
 pub const KATEX_CSS: &str = include_str!("katex/katex.css");
 pub const KATEX_JS: &str = include_str!("katex/katex.min.js");
 const DECK_HTML: &str = include_str!("deck.html");
-const PROMPT: &str = include_str!("slides_prompt.txt");
+pub(crate) const PROMPT: &str = include_str!("slides_prompt.txt");
 const PROMPT_MATERIAL: &str = include_str!("slides_prompt_material.txt");
 const SAMPLE_LECTURE: &str = include_str!("sample_lecture.md");
 /// Claude Code model aliases and reasoning efforts offered in the app.
@@ -46,7 +46,7 @@ pub fn parse_transcript(text: &str) -> (String, Vec<(String, String)>) {
     (title, lines)
 }
 
-fn read_transcript(p: &Path) -> Result<(String, Vec<(String, String)>), String> {
+pub(crate) fn read_transcript(p: &Path) -> Result<(String, Vec<(String, String)>), String> {
     let text = std::fs::read_to_string(p).map_err(|e| format!("Can't read the transcript: {e}"))?;
     Ok(parse_transcript(&text))
 }
@@ -135,7 +135,7 @@ fn save(t: &Path, deck: &Value, title: &str) -> Result<(), String> {
 
 /// Token counts. Runs are covered by the Claude subscription; "listCost" is what the same tokens
 /// would cost on the API.
-fn usage_summary(u: &Value) -> Value {
+pub(crate) fn usage_summary(u: &Value) -> Value {
     let n = |k: &str| u[k].as_u64().unwrap_or(0) as f64;
     let (hit, miss, out) = (n("prompt_cache_hit_tokens"), n("prompt_cache_miss_tokens"), n("completion_tokens"));
     json!({ "model": u["model"], "effort": u["effort"], "prompt": hit + miss, "cached": hit, "output": out,
@@ -197,7 +197,11 @@ pub fn undo(t: &Path) -> Result<Value, String> {
 ///
 /// `Mode::Review` makes end-of-lecture review cards from the whole lecture. They are their own
 /// batch (`review: true`), shown after the slides, and don't move the "new lines" mark.
-pub fn generate(t: &Path, course: &str, mode: Mode, model: &str, effort: &str, lang: &str) -> Result<Value, String> {
+///
+/// `hint` is the student's free-text suggestion for this click ("more diagrams", "skip the
+/// recap"); it goes in the per-call tail and never overrides fidelity.
+#[allow(clippy::too_many_arguments)]
+pub fn generate(t: &Path, course: &str, mode: Mode, model: &str, effort: &str, lang: &str, hint: &str) -> Result<Value, String> {
     let (rebuild, review) = (mode == Mode::Rebuild, mode == Mode::Review);
     let (title, lines) = read_transcript(t)?;
     let mut deck = load_deck(t);
@@ -221,6 +225,9 @@ pub fn generate(t: &Path, course: &str, mode: Mode, model: &str, effort: &str, l
         let titles: Vec<String> = prev.iter().map(|s| format!("- {}", s["title"].as_str().unwrap_or(""))).collect();
         tail.push(format!("TITLES OF THE SLIDES ALREADY MADE:\n{}", titles.join("\n")));
         tail.push(format!("LAST SLIDE (JSON):\n{}", prev.last().unwrap()));
+    }
+    if !hint.trim().is_empty() {
+        tail.push(format!("THE STUDENT ASKS, for these slides (follow it as long as it keeps to the rules above; fidelity comes first):\n{}", hint.trim()));
     }
     tail.push(if review {
         format!(
@@ -294,7 +301,7 @@ pub fn generate(t: &Path, course: &str, mode: Mode, model: &str, effort: &str, l
     Ok(st)
 }
 
-fn model_effort<'a>(model: &'a str, effort: &'a str) -> (&'a str, &'a str) {
+pub(crate) fn model_effort<'a>(model: &'a str, effort: &'a str) -> (&'a str, &'a str) {
     (if MODELS.contains(&model) { model } else { DEFAULT_MODEL }, if EFFORTS.contains(&effort) { effort } else { DEFAULT_EFFORT })
 }
 
@@ -364,7 +371,7 @@ pub fn style_rules(style: &Value) -> String {
 }
 
 /// The JSON object in a model answer (models sometimes wrap it in prose or a code fence).
-fn answer_json(content: &str) -> Result<Value, String> {
+pub(crate) fn answer_json(content: &str) -> Result<Value, String> {
     match (content.find('{'), content.rfind('}')) {
         (Some(a), Some(b)) if b > a => serde_json::from_str(&content[a..=b]).map_err(|e| format!("The slide JSON isn't valid: {e}")),
         _ => Err("The answer has no JSON.".into()),
@@ -467,7 +474,7 @@ pub const LANGUAGES: &[(&str, &str)] = &[
     ("mt", "Maltese"),
 ];
 
-fn lang_name(code: &str) -> Option<&'static str> {
+pub(crate) fn lang_name(code: &str) -> Option<&'static str> {
     LANGUAGES.iter().find(|(c, _)| c.eq_ignore_ascii_case(code.trim())).map(|(_, n)| *n)
 }
 
@@ -493,11 +500,11 @@ impl Mode {
 
 /// What a model run returns: the answer text, token usage, the lookups made and the material
 /// pages seen (only those may be cited).
-struct Run {
-    content: String,
-    usage: Value,
-    lookups: Vec<String>,
-    seen: std::collections::HashSet<(String, usize)>,
+pub(crate) struct Run {
+    pub content: String,
+    pub usage: Value,
+    pub lookups: Vec<String>,
+    pub seen: std::collections::HashSet<(String, usize)>,
 }
 
 /// The `claude` CLI. Apps started from Finder get a bare PATH, so look in the usual places first.
@@ -566,7 +573,7 @@ pub fn claude_failed(stderr: &str) -> String {
 /// Runs the request through Claude Code (`claude -p`) on the user's Claude subscription, without
 /// its own tools, settings or CLAUDE.md, in an empty temp directory. The course material is
 /// offered through this app's MCP server (`--mcp-material`). Claude Code caches the prompt itself.
-fn run_claude(system: &str, user: &str, course: &str, material: bool, model: &str, effort: &str, rebuild: bool) -> Result<Run, String> {
+pub(crate) fn run_claude(system: &str, user: &str, course: &str, material: bool, model: &str, effort: &str, rebuild: bool) -> Result<Run, String> {
     use std::io::{BufRead, Read};
     let dir = std::env::temp_dir().join(format!("transcribe-lecture-claude-{}-{}", std::process::id(), chrono::Local::now().timestamp_millis()));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;

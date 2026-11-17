@@ -14,6 +14,12 @@
     [58, "Next week there's the lab on this, bring your laptops."],
   ];
   const sent = [], errors = [];
+  // The lecture's docs, as docs.rs keeps them: path → {md, t (creation order)}.
+  const DOCDIR = PATH.replace(/\.md$/, " · Docs");
+  const docs = {};
+  let docN = 0;
+  const docList = () => Object.keys(docs).sort((a, b) => docs[a].t - docs[b].t).map((p) => ({ name: p.split("/").pop().replace(/\.md$/, ""), path: p }));
+  const freeDoc = (name) => { for (let n = 1; ; n++) { const p = `${DOCDIR}/${name}${n > 1 ? " " + n : ""}.md`; if (!docs[p]) return p; } };
   let lines = LINES.map((l) => [...l]);
   const fire = (e) => setTimeout(() => window.onEngine(e), 0);
   const slidesState = () => ({ type: "slides", path: PATH, title: "Test Lecture", lines: lines.length, done: 0, slides: [], lang: "en", usage: null, flagged: 0, lookups: [] });
@@ -35,6 +41,13 @@
         break;
       case "preload": fire({ type: "modelReady", path: m.model, ms: 1 }); break;
       case "slidesState": fire(slidesState()); break;
+      case "docsList": fire({ type: "docs", path: m.path, docs: docList(), open: null }); break;
+      case "docRead": fire({ type: "doc", path: m.path, doc: m.doc, name: m.doc.split("/").pop().replace(/\.md$/, ""), md: docs[m.doc].md, images: docs[m.doc].images || {} }); break;
+      case "docSave": docs[m.doc].md = m.md; fire({ type: "docSaved", path: m.path, doc: m.doc, seq: m.seq }); break;
+      case "docCreate": { const p = freeDoc(m.name); docs[p] = { md: m.md, t: ++docN }; fire({ type: "docs", path: m.path, docs: docList(), open: p }); break; }
+      case "docRename": { const p = freeDoc(m.name); docs[p] = docs[m.doc]; delete docs[m.doc]; fire({ type: "docs", path: m.path, docs: docList(), open: p }); break; }
+      case "docDelete": delete docs[m.doc]; fire({ type: "docs", path: m.path, docs: docList(), open: null }); break;
+      case "docImage": fire({ type: "docImage", path: m.path, doc: m.doc, id: m.id, src: `images/pasted-${m.id}.png`, url: m.data }); break;
       case "lineEdit": {
         // What slides::edit_body does to the file.
         const text = m.text.split(/\s+/).filter(Boolean).join(" ");
@@ -75,6 +88,23 @@
       await T.until(() => document.querySelectorAll("#segs .seg").length === LINES.length, "the lecture's lines are shown");
       await wait(20);
     },
+    docs,
+    DOCDIR,
+    /** Adds a doc to the fake lecture's folder. */
+    addDoc(name, md, images) { const p = `${DOCDIR}/${name}.md`; docs[p] = { md, t: ++docN, images }; return p; },
+    /** Opens the fake lecture and its Docs tab, and waits for the first doc (if any) to load. */
+    async openDocs() {
+      await T.open();
+      await T.click("#docsBtn");
+      const n = Object.keys(docs).length;
+      await T.until(() => (n ? document.querySelector("#docPage").style.display !== "none" && Docs.doc : document.querySelector("#docEmpty").textContent.includes("No docs")), "the Docs tab to load");
+      await wait(30);
+    },
+    /** The open doc's Markdown as last saved (waits for the autosave). */
+    async saved(md, msg) { await T.until(() => docs[Docs.doc]?.md === md, `${msg || "saved"}: expected ${JSON.stringify(md)}, have ${JSON.stringify(docs[Docs.doc]?.md)}`, 3000); },
+    blocks: () => [...document.querySelectorAll("#docBody > *")].map((b) => b.tagName.toLowerCase() + (b.dataset.k ? ":" + b.dataset.k : "")),
+    /** A paste of plain text, as the Edit menu's Paste delivers it. */
+    paste(text) { const dt = new DataTransfer(); dt.setData("text/plain", text); document.activeElement.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true })); return wait(40); },
     record: () => window.onEngine({ type: "state", state: "recording", device: "Test Microphone" }),
     /** The transcript line elements (`.txt`), or line i's. */
     lines: () => [...document.querySelectorAll("#segs .seg .txt")],
