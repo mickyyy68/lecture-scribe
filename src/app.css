@@ -5,8 +5,9 @@
    [data-theme="dark"] (slides.js follows the macOS setting). */
 
 :root {
-  /* Type: the system font everywhere (bold for titles and headings), mono for times and code. */
-  --app-font: -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
+  /* Type: Avenir Next everywhere (bold for titles and headings), mono for times and code.
+     Avenir Next ships with macOS, so nothing is bundled; the system font is the fallback. */
+  --app-font: "Avenir Next", -apple-system, BlinkMacSystemFont, "Helvetica Neue", system-ui, sans-serif;
   --app-mono: ui-monospace, "SF Mono", Menlo, monospace;
   --app-text-xs: 11.5px;   /* badges, kbd, meta */
   --app-text-sm: 12.5px;   /* hints, status, secondary rows */
