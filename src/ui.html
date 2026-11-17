@@ -40,8 +40,19 @@
   #timer { font: 600 17px var(--app-mono); min-width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
   #meter { width: 90px; height: 5px; border-radius: var(--app-r-pill); background: var(--app-sunken); box-shadow: inset 0 0 0 1px var(--app-line); overflow: hidden; }
   #meter > div { height: 100%; width: 0; background: var(--app-ok); transition: width .08s linear; }
-  .settings { margin-top: 8px; gap: 14px; color: var(--app-fg2); font-size: var(--app-text-sm); }
-  .settings label { display: flex; align-items: center; gap: 6px; }
+  /* Recording settings: a button beside Start/Continue that opens #recMenu below it. */
+  #recSetBtn { display: inline-flex; align-items: center; gap: 2px; padding: 4px 6px 4px 8px; color: var(--app-fg2); }
+  #recSetBtn:hover:not(:disabled), #recSetBtn.open { color: var(--app-fg); background: var(--app-hover); }
+  #recSetBtn .ic { width: 16px; height: 16px; }
+  #recSetBtn .ic.chev { width: 13px; height: 13px; }
+  #recMenu { position: fixed; width: 340px; padding: 6px 6px 8px; }
+  #recMenu .rs-row { display: flex; align-items: center; gap: 12px; padding: 5px 9px; font-size: var(--app-text-sm); color: var(--app-fg2); }
+  #recMenu .rs-row > span { flex: none; width: 76px; }
+  #recMenu .rs-row .picker { flex: 1; max-width: none; }
+  #recMenu .rs-row button.picker { width: auto; padding: 3px 8px; border: 1px solid var(--app-line-strong); background: var(--app-surface); font: 500 var(--app-text-sm)/18px var(--app-font); }
+  #recMenu .rs-row button.picker:hover:not(:disabled) { background: var(--app-hover); }
+  #recMenu .rs-row button.picker.open, #recMenu .rs-row button.picker:focus-visible { border-color: var(--app-accent); }
+  #recMenu label.rs-row { gap: 8px; color: var(--app-fg); cursor: default; }
   input[type=checkbox] { accent-color: var(--app-accent); }
   /* Fields and pickers share one look: paper, a hairline, a soft accent ring on focus. */
   .field-in { font: 500 var(--app-text-sm) var(--app-font); color: var(--app-fg); background: var(--app-surface); border: 1px solid var(--app-line-strong);
@@ -66,7 +77,7 @@
   .pk-opt.sel::before { content: ""; position: absolute; left: 11px; top: 50%; width: 8px; height: 4px; margin-top: -4px;
     border: solid var(--app-accent); border-width: 0 0 1.6px 1.6px; transform: rotate(-45deg); }
   .pk-opt.dis { opacity: .45; }
-  #status { font-size: var(--app-text-sm); color: var(--app-fg2); }
+  #status { font-size: var(--app-text-sm); color: var(--app-fg2); white-space: nowrap; }
   #status.rec { color: var(--app-danger); font-weight: 600; }
   #status.paused { color: var(--app-warn); font-weight: 600; }
 
@@ -431,6 +442,7 @@
 <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
 <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></symbol>
 <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M8 7h7"/></symbol>
+<symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
 <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
 <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 7V5h11v2M9.5 5v14M7 19h5M14 12h7M17.5 12v7"/></symbol>
 <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
@@ -444,20 +456,22 @@
     <input id="title" placeholder="Lecture title (e.g. Networks – DHCP)" spellcheck="false">
     <input id="course" placeholder="Course" title="Course name: helps Claude fix misheard terms, keeps the course's glossary, and goes in the slide footer" spellcheck="false">
     <span class="spacer"></span>
+    <span id="status">Starting…</span>
     <div id="meter" title="Microphone level"><div></div></div>
     <div id="timer">00:00:00</div>
     <button id="startBtn" class="rec" disabled><span class="dot"></span>Start</button>
     <button id="contBtn" class="rec" style="display:none" title="Record more of the lecture shown below, into the same transcript, audio and deck. Times continue where it ended"><span class="dot"></span>Continue</button>
+    <button id="recSetBtn" title="Recording settings: microphone, language, saving the audio"><svg class="ic"><use href="#i-mic"/></svg><svg class="ic chev"><use href="#i-chev"/></svg></button>
     <button id="pauseBtn" style="display:none">Pause</button>
     <button id="stopBtn" style="display:none">Stop</button>
   </div>
-  <div class="row settings">
-    <label id="modelWrap">Model <select id="model"></select></label>
-    <label id="langWrap" style="display:none">Language <select id="lang"></select></label>
-    <label>Mic <select id="device"></select></label>
-    <label><input type="checkbox" id="saveAudio" checked> Also save audio</label>
-    <span class="spacer"></span>
-    <span id="status">Starting…</span>
+  <div class="pop" id="recMenu">
+    <div class="lab">Recording</div>
+    <div class="rs-row" id="modelWrap"><span>Model</span><select id="model"></select></div>
+    <div class="rs-row" id="langWrap" style="display:none"><span>Language</span><select id="lang"></select></div>
+    <div class="rs-row"><span>Microphone</span><select id="device"></select></div>
+    <hr>
+    <label class="rs-row"><input type="checkbox" id="saveAudio" checked>Also save the audio</label>
   </div>
 </header>
 
@@ -767,6 +781,8 @@ function render() {
   setText($("pauseBtn"), paused ? "Resume" : "Pause");
   $("startBtn").disabled = $("contBtn").disabled = !modelReady || !curModel();
   $("contBtn").style.display = !busy && curPath && segs.length ? "" : "none";
+  $("recSetBtn").style.display = busy ? "none" : "";
+  if (busy && $("recMenu").classList.contains("open")) closePops();
   for (const id of ["model", "lang", "device", "saveAudio", "title", "recent"]) $(id).disabled = busy;
   $("langWrap").style.display = curModel()?.langs === "multi" ? "" : "none";
   const st = $("status");
@@ -1152,6 +1168,7 @@ function togglePop(menu, btn, fill) {
   menu.style.left = Math.max(12, Math.min(r.left - card.left, card.width - menu.offsetWidth - 12)) + "px";
 }
 addEventListener("mousedown", (e) => {
+  if (e.target.closest?.(".pk-list")) return; // a Picker list opened from inside a menu
   for (const m of document.querySelectorAll(".pop.open")) if (!m.contains(e.target) && !m.opener?.contains(e.target)) { m.classList.remove("open"); m.opener?.classList.remove("open"); }
   if (cmpMode && !e.target.closest("#composer, #modelMenu, #ask")) closeComposer();
 }, true);
@@ -1237,6 +1254,15 @@ $("slideMenu").onclick = (e) => {
   closePops(); $("si" + b.dataset.i)?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 $("moreBtn").onclick = () => togglePop($("moreMenu"), $("moreBtn"));
+// Recording settings open below their button in the header, right-aligned with it.
+$("recSetBtn").onclick = () => {
+  const menu = $("recMenu"), btn = $("recSetBtn"), was = menu.classList.contains("open");
+  closePops(); if (was) return;
+  menu.opener = btn; menu.classList.add("open"); btn.classList.add("open");
+  const r = btn.getBoundingClientRect();
+  menu.style.top = (r.bottom + 6) + "px";
+  menu.style.left = Math.max(12, Math.min(r.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 12)) + "px";
+};
 $("moreMenu").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && b.id !== "smaller" && b.id !== "bigger") closePops(); });
 
 $("tabSlides").onclick = () => { docsOpen = false; glossOpen = setOpen = false; renderGloss(); };

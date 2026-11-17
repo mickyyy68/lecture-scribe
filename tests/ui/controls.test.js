@@ -91,3 +91,33 @@ T.test("the Slide style options show which one is chosen", async () => {
   const now = document.querySelector(`.st-ctl .switch[data-k="${sw.dataset.k}"] button.on`);
   T.eq(now.dataset.v, off.dataset.v, "clicking an option chooses it");
 });
+
+// Model, language, mic and "save the audio" live in a menu beside Start/Continue, not in the header.
+T.test("the recording settings beside Start choose the mic, language and audio for the recording", async () => {
+  await T.open();
+  T.ok(!$("recMenu").classList.contains("open"), "closed at first");
+  const r = $("recSetBtn").getBoundingClientRect(), c = $("contBtn").getBoundingClientRect();
+  T.ok(Math.abs(r.top - c.top) < 4 && r.left > c.right, "the button sits right after Continue");
+  await T.click("#recSetBtn");
+  T.ok($("recMenu").classList.contains("open"), "the menu opens");
+  T.ok($("langWrap").style.display !== "none", "a multilingual model shows Language");
+  await T.shot("recording-settings");
+  // A picker's list sits outside the menu: choosing from it must leave the menu open.
+  await T.click($("lang").picker);
+  await T.click([...document.querySelectorAll(".pk-list .pk-opt")].find((d) => d.textContent === "Italian"));
+  T.eq($("lang").value, "it");
+  T.ok($("recMenu").classList.contains("open"), "still open after choosing a language");
+  await T.click($("device").picker);
+  await T.click([...document.querySelectorAll(".pk-list .pk-opt")].find((d) => d.textContent === "Test Microphone"));
+  T.eq($("device").value, "Test Microphone");
+  await T.click("#saveAudio");
+  T.eq($("saveAudio").checked, false);
+  await T.click("#title"); // a click elsewhere closes it
+  T.ok(!$("recMenu").classList.contains("open"), "a click outside closes the menu");
+  await T.click("#startBtn");
+  const m = T.sent("start")[0];
+  T.eq([m.device, m.language, m.saveAudio], ["Test Microphone", "it", false]);
+  T.record();
+  await T.wait(30);
+  T.eq($("recSetBtn").style.display, "none", "hidden while recording");
+});
