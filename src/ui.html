@@ -532,7 +532,7 @@ function renderSlides(freshFrom) {
     `<div class="si${freshFrom != null && i >= freshFrom ? " fresh" : ""}" id="si${i}"><div class="fr">${renderSlide(s, i + 1, slides.length, foot)}</div>` +
     `<div class="si-meta">${s.from ? `<a data-t="${s.from}" title="Show this part of the transcript">${s.from}${s.to ? " – " + s.to : ""}</a>` : ""}</div>` +
     (s.notes ? `<p class="si-notes"></p>` : "") + `</div>`).join("");
-  slides.forEach((s, i) => { const p = list.querySelector(`#si${i} .si-notes`); if (p) p.textContent = s.notes; });
+  slides.forEach((s, i) => { const p = list.querySelector(`#si${i} .si-notes`); if (p) p.innerHTML = renderNotes(s.notes); });
   renderedCount = slides.length;
   fitSlides();
   fitSlideText(list);

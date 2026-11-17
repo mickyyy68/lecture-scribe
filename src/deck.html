@@ -40,7 +40,7 @@ const deck = document.getElementById("deck");
 deck.innerHTML = DATA.map((s, i) => `<section><div class="fr" data-i="${i}">${renderSlide(s, i + 1, n, FOOT)}</div>` +
   `<div class="meta"><span>${[s.from, s.to].filter(Boolean).join(" – ")}</span></div>` +
   (s.notes ? `<p class="notes"></p>` : "") + `</section>`).join("");
-deck.querySelectorAll("section").forEach((sec, i) => { const p = sec.querySelector(".notes"); if (p) p.textContent = DATA[i].notes; });
+deck.querySelectorAll("section").forEach((sec, i) => { const p = sec.querySelector(".notes"); if (p) p.innerHTML = renderNotes(DATA[i].notes); });
 fitSlideText(deck);
 document.fonts && document.fonts.ready.then(() => fitSlideText(deck));
 const fit = (fr) => fr.style.setProperty("--k", fr.clientWidth / 1280);

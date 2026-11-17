@@ -654,6 +654,8 @@
   }
 
   window.renderSlide = slide;
+  // Speaker notes: same inline markup as the slides ($math$, `code`, **bold**, "(?)"). Escapes HTML.
+  window.renderNotes = inline;
 
   // Clicking a review card shows its answer (and doesn't open the slide).
   document.addEventListener("click", (e) => {
