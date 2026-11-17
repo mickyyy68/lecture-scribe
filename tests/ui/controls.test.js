@@ -121,3 +121,73 @@ T.test("the recording settings beside Start choose the mic, language and audio f
   await T.wait(30);
   T.eq($("recSetBtn").style.display, "none", "hidden while recording");
 });
+
+// Past lectures open from a searchable menu at the top left (there's no footer any more).
+T.test("the lecture picker at the top left searches past lectures and opens one", async () => {
+  await T.open();
+  T.ok(!document.querySelector("footer"), "no footer");
+  T.ok($("title").getBoundingClientRect().left < 40 && $("title").readOnly, "the lecture's name, at the top left, is read-only");
+  await T.click("#title");
+  T.ok($("lecMenu").classList.contains("open"), "the menu opens");
+  T.eq(document.activeElement, $("lecFilter"), "the search field has the focus");
+  await T.until(() => T.sent("recentList").length, "it asks for the latest list");
+  const rows = () => [...document.querySelectorAll("#lecList button")];
+  T.eq(rows().map((r) => r.querySelector(".t").textContent), T.RECENT.map((x) => x.name.slice(17)));
+  T.ok(rows()[0].querySelector(".ok svg") && !rows()[1].querySelector(".ok svg"), "the open lecture is ticked");
+  T.eq(rows()[4].querySelector(".k").textContent.slice(0, 11), "12 Jun 2025", "an older year shows the year");
+  T.ok(/Test Lecture/.test($("lecFile").textContent) && $("words").textContent === "78 words", "the open lecture's file and words");
+  await T.shot("lecture-picker");
+  await T.type("grad");
+  T.eq(rows().map((r) => r.querySelector(".t").textContent), ["Gradient descent, part 1"]);
+  T.eq(rows()[0].querySelector("mark")?.textContent, "Grad", "the match is marked");
+  await T.shot("lecture-picker-search");
+  await T.type("zzz");
+  T.eq(rows().length, 0); T.ok(/No lecture matches/.test($("lecList").textContent));
+  for (let i = 0; i < 9; i++) await T.key("Backspace");
+  T.eq(rows().length, T.RECENT.length, "clearing the search lists them all again");
+  await T.key("ArrowDown"); await T.key("ArrowDown");
+  await T.key("Enter");
+  T.ok(!$("lecMenu").classList.contains("open"), "choosing closes the menu");
+  T.eq(T.sent("loadTranscript").map((m) => m.path), [T.RECENT[2].path]);
+  // A click works too, and ⌘O opens it.
+  await T.key("o", ["cmd"]);
+  T.ok($("lecMenu").classList.contains("open"), "⌘O opens it");
+  await T.click(rows()[3]);
+  T.eq(T.sent("loadTranscript").map((m) => m.path), [T.RECENT[2].path, T.RECENT[3].path]);
+});
+
+T.test("while recording, the lecture picker shows the file but can't switch lecture", async () => {
+  await T.open();
+  T.record();
+  await T.click("#lecBtn");
+  T.ok(document.querySelectorAll("#lecList button").length && [...document.querySelectorAll("#lecList button")].every((b) => b.disabled), "rows disabled");
+  T.ok(/Stop the recording/.test($("lecList").textContent));
+  await T.key("Enter");
+  T.eq(T.sent("loadTranscript"), []);
+});
+
+T.test("the Slides and Docs tabs have icons", async () => {
+  await T.open();
+  T.eq([$("tabSlides"), $("docsBtn")].map((b) => b.querySelector("use")?.getAttribute("href")), ["#i-slides", "#i-doc"]);
+  T.eq([$("tabSlides"), $("docsBtn")].map((b) => b.textContent), ["Slides", "Docs"]);
+});
+
+T.test("with no lecture open the name is a field; New lecture gets back to one", async () => {
+  await T.click("#title");
+  T.ok(!$("lecMenu").classList.contains("open") && document.activeElement === $("title"), "a fresh window: the click edits the name");
+  await T.type("Week 1");
+  T.eq($("title").value, "Week 1");
+  await T.click("#lecBtn");
+  T.ok($("lecMenu").classList.contains("open"), "the chevron still opens the picker");
+  await T.key("Escape");
+  await T.open();
+  await T.click("#title");
+  await T.click("#lecNew");
+  T.ok(!$("lecMenu").classList.contains("open"), "closed");
+  T.eq([$("title").value, $("title").readOnly, document.activeElement === $("title"), document.querySelectorAll("#segs .seg").length, $("contBtn").style.display],
+    ["", false, true, 0, "none"], "an empty, named-by-you lecture");
+  await T.type("Week 3");
+  await T.shot("new-lecture");
+  await T.click("#startBtn");
+  T.eq(T.sent("start").map((m) => [m.title, m.continue]), [["Week 3", undefined]]);
+});

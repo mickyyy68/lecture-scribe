@@ -329,6 +329,10 @@ fn main() {
                     let i = msg["i"].as_u64().unwrap_or(u64::MAX) as usize;
                     let _ = tx.send(Cmd::EditLine { path: PathBuf::from(s("path")), op: s("op"), i, text: s("text") });
                 }
+                // The lecture picker asks again each time it opens, so new lectures show up.
+                "recentList" => {
+                    let _ = ipc_proxy.send_event(json!({ "type": "recent", "recent": slides::recent(&out_dir()) }).to_string());
+                }
                 "loadTranscript" => {
                     let ev = slides::transcript_payload(&PathBuf::from(s("path")))
                         .unwrap_or_else(|e| json!({ "type": "error", "message": e }));

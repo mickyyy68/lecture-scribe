@@ -13,6 +13,14 @@
     [49, "Mini-batches are the compromise everyone uses in practice."],
     [58, "Next week there's the lab on this, bring your laptops."],
   ];
+  // Past lectures in the transcripts folder, newest first, as slides::recent lists them.
+  const RECENT = [
+    { name: "2026-11-17 10.02 Test Lecture", path: PATH },
+    { name: "2026-11-10 10.00 Backpropagation", path: "/tmp/lecture-scribe-ui-test/2026-11-10 10.00 Backpropagation.md" },
+    { name: "2026-11-03 10.01 Gradient descent, part 1", path: "/tmp/lecture-scribe-ui-test/2026-11-03 10.01 Gradient descent, part 1.md" },
+    { name: "2026-10-27 09.58 Linear regression", path: "/tmp/lecture-scribe-ui-test/2026-10-27 09.58 Linear regression.md" },
+    { name: "2025-06-12 14.30 Networks – DHCP", path: "/tmp/lecture-scribe-ui-test/2025-06-12 14.30 Networks – DHCP.md" },
+  ];
   const sent = [], errors = [];
   // The lecture's docs, as docs.rs keeps them: path → {md, t (creation order)}.
   const DOCDIR = PATH.replace(/\.md$/, " · Docs");
@@ -37,8 +45,9 @@
       case "ready":
         fire({ type: "init", models: [{ label: "Parakeet V3 0.6B", langs: "multi", path: "/m/parakeet.gguf" }], modelBytes: 0,
           devices: ["Test Microphone"], defaultDevice: "Test Microphone", themeCss: "", themes: [],
-          settings: { onboarded: true, model: "/m/parakeet.gguf", course: "Machine Learning" }, outDir: "/tmp/lecture-scribe-ui-test", recent: [] });
+          settings: { onboarded: true, model: "/m/parakeet.gguf", course: "Machine Learning" }, outDir: "/tmp/lecture-scribe-ui-test", recent: RECENT });
         break;
+      case "recentList": fire({ type: "recent", recent: RECENT }); break;
       case "preload": fire({ type: "modelReady", path: m.model, ms: 1 }); break;
       case "slidesState": fire(slidesState()); break;
       case "docsList": fire({ type: "docs", path: m.path, docs: docList(), open: null }); break;
@@ -74,7 +83,7 @@
   const tests = [];
 
   window.T = {
-    PATH, LINES,
+    PATH, LINES, RECENT,
     test: (name, fn) => tests.push({ name, fn }),
     sent: (cmd) => sent.filter((m) => !cmd || m.cmd === cmd),
     clearSent: () => { sent.length = 0; },

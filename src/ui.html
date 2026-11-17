@@ -18,7 +18,14 @@
   ::selection { background: var(--app-accent-soft); }
   header { padding: 12px 20px 10px; border-bottom: 1px solid var(--app-line); background: var(--app-bg); }
   .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  #title { flex: 0 1 auto; min-width: 120px; max-width: 55%; font: 700 var(--app-title) var(--app-font); letter-spacing: -0.01em; border: none; background: transparent;
+  /* The lecture's name is the lecture picker: with a lecture open it's read-only and a click opens
+     #lecMenu; with none (a new lecture) it's the field that names the next recording. */
+  #lecName { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; max-width: 55%; margin-left: -8px; padding: 0 0 0 8px; border-radius: var(--app-r-md); }
+  #lecName.pick, #lecName.pick #title { cursor: pointer; }
+  #lecName.pick:hover, #lecName.open { background: var(--app-hover); }
+  #lecName #lecBtn { border: none; background: transparent; padding: 6px 8px 6px 2px; }
+  #lecName.pick #lecBtn, #lecName.open #lecBtn { color: var(--app-fg); }
+  #title { flex: 0 1 auto; min-width: 120px; max-width: 100%; text-overflow: ellipsis; font: 700 var(--app-title) var(--app-font); letter-spacing: -0.01em; border: none; background: transparent;
     color: var(--app-fg); outline: none; padding: 4px 0; }
   #title::placeholder { color: var(--app-fg3); }
   /* Buttons: secondary by default (paper with a hairline); .go is the one primary, .rec records,
@@ -40,11 +47,27 @@
   #timer { font: 600 17px var(--app-mono); min-width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
   #meter { width: 90px; height: 5px; border-radius: var(--app-r-pill); background: var(--app-sunken); box-shadow: inset 0 0 0 1px var(--app-line); overflow: hidden; }
   #meter > div { height: 100%; width: 0; background: var(--app-ok); transition: width .08s linear; }
-  /* Recording settings: a button beside Start/Continue that opens #recMenu below it. */
-  #recSetBtn { display: inline-flex; align-items: center; gap: 2px; padding: 4px 6px 4px 8px; color: var(--app-fg2); }
-  #recSetBtn:hover:not(:disabled), #recSetBtn.open { color: var(--app-fg); background: var(--app-hover); }
-  #recSetBtn .ic { width: 16px; height: 16px; }
-  #recSetBtn .ic.chev { width: 13px; height: 13px; }
+  /* Header menus open below their button: the lecture picker (#lecName → #lecMenu) and the
+     recording settings after Start/Continue (#recSetBtn → #recMenu, icon + chevron). */
+  .hd-menu { display: inline-flex; align-items: center; gap: 2px; padding: 4px 6px 4px 8px; color: var(--app-fg2); flex: none; }
+  .hd-menu:hover:not(:disabled), .hd-menu.open { color: var(--app-fg); background: var(--app-hover); }
+  .hd-menu .ic { width: 16px; height: 16px; }
+  .hd-menu .ic.chev { width: 13px; height: 13px; }
+  #lecMenu { position: fixed; width: 420px; max-height: min(540px, calc(100vh - 90px)); overflow: hidden; padding: 0 6px 6px; }
+  #lecMenu .lm-search { display: flex; align-items: center; gap: 8px; margin: 0 -6px 6px; padding: 9px 15px; border-bottom: 1px solid var(--app-line); color: var(--app-fg3); }
+  #lecFilter { flex: 1; min-width: 0; border: none; outline: none; background: transparent; padding: 0; color: var(--app-fg); font: 500 var(--app-text)/20px var(--app-font); -webkit-user-select: text; }
+  #lecFilter::placeholder { color: var(--app-fg3); }
+  #lecList { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+  #lecList .k { font-variant-numeric: tabular-nums; }
+  #lecList .ok { display: flex; align-items: center; }
+  #lecList mark { background: var(--app-accent-soft); color: inherit; border-radius: 2px; }
+  #lecMenu .lm-info { display: flex; align-items: center; gap: 6px; padding: 4px 9px 2px; font-size: var(--app-text-sm); color: var(--app-fg2); white-space: nowrap; overflow: hidden; }
+  #lecMenu .lm-info #lecFile { overflow: hidden; text-overflow: ellipsis; color: var(--app-fg); font-weight: 500; }
+  #lecMenu .lm-info #words::before, #lecMenu .lm-info #saved:not(:empty)::before { content: "·"; margin-right: 6px; }
+  #lecMenu .lm-info #saved .dot { color: var(--app-ok); width: 6px; height: 6px; margin-right: 5px; }
+  #lecReveal { margin-left: auto; padding-left: 12px; color: var(--app-fg2); cursor: pointer; text-decoration: underline; text-decoration-color: var(--app-fg3); text-underline-offset: 2px; }
+  #lecReveal:hover { color: var(--app-fg); }
+  #lecList button:hover:not(.act) { background: transparent; } /* the mouse moves .act, so hover and keys agree */
   #recMenu { position: fixed; width: 340px; padding: 6px 6px 8px; }
   #recMenu .rs-row { display: flex; align-items: center; gap: 12px; padding: 5px 9px; font-size: var(--app-text-sm); color: var(--app-fg2); }
   #recMenu .rs-row > span { flex: none; width: 76px; }
@@ -128,7 +151,8 @@
   .cd-side { flex: 1; min-width: 0; font-size: 12px; color: var(--app-fg3); }
   .cd-side.r { text-align: right; }
   .tabs { display: inline-flex; background: var(--app-sunken); border-radius: var(--app-r-md); padding: 3px; flex: none; }
-  .tabs button { position: relative; border: none; background: transparent; border-radius: var(--app-r-sm); padding: 3px 16px; font: 500 13px/18px var(--app-font); color: var(--app-fg2); }
+  .tabs button { position: relative; display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; border-radius: var(--app-r-sm); padding: 3px 14px 3px 11px; font: 500 13px/18px var(--app-font); color: var(--app-fg2); }
+  .tabs button .ic { width: 15px; height: 15px; }
   .tabs button:hover:not(:disabled) { background: transparent; color: var(--app-fg); }
   .tabs button.on, .tabs button.on:hover:not(:disabled) { background: var(--app-seg-on); color: var(--app-fg); box-shadow: var(--app-sh-raised); }
   .tab-dot { display: none; position: absolute; top: 4px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--app-accent); animation: pulse 1.2s infinite; }
@@ -357,8 +381,6 @@
   .dp-row { display: flex; gap: 6px; margin-top: 10px; }
   .dp-row button { padding: 2px 10px; font-size: var(--app-text-sm); }
 
-  footer { border-top: 1px solid var(--app-line); background: var(--app-bg); padding: 7px 20px; font-size: var(--app-text-sm); color: var(--app-fg2); }
-  #saved a { color: var(--app-fg); cursor: pointer; text-decoration: underline; text-decoration-color: var(--app-fg3); text-underline-offset: 2px; }
   #toast { position: fixed; top: 14px; right: 14px; max-width: 380px; display: flex; flex-direction: column; gap: 8px; z-index: 9; }
   .toast { display: flex; gap: 10px; align-items: baseline; background: var(--app-raised); border-radius: var(--app-r-md); box-shadow: var(--app-sh2); padding: 9px 12px; font-size: 13px;
     animation: pop-in .2s var(--app-ease); }
@@ -442,6 +464,7 @@
 <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
 <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></symbol>
 <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M8 7h7"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
 <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
 <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
 <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 7V5h11v2M9.5 5v14M7 19h5M14 12h7M17.5 12v7"/></symbol>
@@ -453,7 +476,7 @@
 </defs></svg>
 <header>
   <div class="row">
-    <input id="title" placeholder="Lecture title (e.g. Networks – DHCP)" spellcheck="false">
+    <div id="lecName"><input id="title" placeholder="Lecture title (e.g. Networks – DHCP)" spellcheck="false"><button id="lecBtn" class="hd-menu" title="Open a lecture (⌘O)"><svg class="ic chev"><use href="#i-chev"/></svg></button></div>
     <input id="course" placeholder="Course" title="Course name: helps Claude fix misheard terms, keeps the course's glossary, and goes in the slide footer" spellcheck="false">
     <span class="spacer"></span>
     <span id="status">Starting…</span>
@@ -461,9 +484,16 @@
     <div id="timer">00:00:00</div>
     <button id="startBtn" class="rec" disabled><span class="dot"></span>Start</button>
     <button id="contBtn" class="rec" style="display:none" title="Record more of the lecture shown below, into the same transcript, audio and deck. Times continue where it ended"><span class="dot"></span>Continue</button>
-    <button id="recSetBtn" title="Recording settings: microphone, language, saving the audio"><svg class="ic"><use href="#i-mic"/></svg><svg class="ic chev"><use href="#i-chev"/></svg></button>
+    <button id="recSetBtn" class="hd-menu" title="Recording settings: microphone, language, saving the audio"><svg class="ic"><use href="#i-mic"/></svg><svg class="ic chev"><use href="#i-chev"/></svg></button>
     <button id="pauseBtn" style="display:none">Pause</button>
     <button id="stopBtn" style="display:none">Stop</button>
+  </div>
+  <div class="pop" id="lecMenu">
+    <div class="lm-search"><svg class="ic"><use href="#i-search"/></svg><input id="lecFilter" placeholder="Search lectures" spellcheck="false" autocomplete="off"></div>
+    <div id="lecList" role="listbox"></div>
+    <hr>
+    <button id="lecNew"><svg class="ic"><use href="#i-plus"/></svg><span class="t">New lecture</span><span class="k">name it, then press Start</span></button>
+    <div class="lm-info"><span id="lecFile">No lecture open</span><span id="words">0 words</span><span id="saved"></span><a id="lecReveal">Show in Finder</a></div>
   </div>
   <div class="pop" id="recMenu">
     <div class="lab">Recording</div>
@@ -498,8 +528,8 @@
       <div class="cd-head">
         <span class="cd-side"></span>
         <span class="tabs" role="tablist">
-          <button class="on" id="tabSlides" role="tab">Slides<i class="tab-dot"></i></button>
-          <button id="docsBtn" role="tab" title="Your own docs about this lecture: notes, summaries, exercises">Docs<i class="tab-dot"></i></button>
+          <button class="on" id="tabSlides" role="tab"><svg class="ic"><use href="#i-slides"/></svg>Slides<i class="tab-dot"></i></button>
+          <button id="docsBtn" role="tab" title="Your own docs about this lecture: notes, summaries, exercises"><svg class="ic"><use href="#i-doc"/></svg>Docs<i class="tab-dot"></i></button>
         </span>
         <span class="cd-side r"><span id="docSavedTxt"></span></span>
       </div>
@@ -612,12 +642,6 @@
   </aside>
 </div>
 
-<footer class="row">
-  <span id="words">0 words</span>
-  <span id="saved"></span>
-  <span class="spacer"></span>
-  <select id="recent" title="Open a past lecture"><option value="">Open a past lecture…</option></select>
-</footer>
 <div id="toast"></div>
 <div id="dtool" class="float"><button data-f="bold" title="Bold (⌘B)">B</button><button data-f="italic" title="Italic (⌘I)" style="font-style:italic">I</button><button data-f="strike" title="Strikethrough (⇧⌘X)" style="text-decoration:line-through">S</button><button data-f="code" title="Code (⌘E)" style="font-family:var(--app-mono)">{ }</button><i></i><button data-f="link" title="Link (⌘K)">Link</button></div>
 <div id="dslash" class="float"></div>
@@ -783,7 +807,8 @@ function render() {
   $("contBtn").style.display = !busy && curPath && segs.length ? "" : "none";
   $("recSetBtn").style.display = busy ? "none" : "";
   if (busy && $("recMenu").classList.contains("open")) closePops();
-  for (const id of ["model", "lang", "device", "saveAudio", "title", "recent"]) $(id).disabled = busy;
+  for (const id of ["model", "lang", "device", "saveAudio"]) $(id).disabled = busy;
+  renderLecName();
   $("langWrap").style.display = curModel()?.langs === "multi" ? "" : "none";
   const st = $("status");
   st.className = rec ? "rec" : paused ? "paused" : "";
@@ -918,6 +943,7 @@ function goToTime(hms) {
 /* ---------- slides ---------- */
 function setCurPath(p) {
   if (p === curPath) return;
+  renderLecName(p);
   curPath = p; deck = null; slidesErr = ""; renderedCount = -1;
   if (typeof Docs !== "undefined") Docs.lecture(p);
   renderSlides();
@@ -1155,6 +1181,7 @@ const OK_SVG = '<svg class="ic"><use href="#i-check"/></svg>';
 function draftBusy() { return typeof Docs !== "undefined" && Docs.drafting; }
 function closePops() {
   for (const m of document.querySelectorAll(".pop.open")) { m.classList.remove("open"); m.opener?.classList.remove("open"); }
+  if (document.activeElement?.closest?.(".pop:not(.open)")) document.activeElement.blur();
 }
 // Opens `menu` above `btn` (filled by `fill`), inside the card; a second click closes it.
 function togglePop(menu, btn, fill) {
@@ -1254,15 +1281,114 @@ $("slideMenu").onclick = (e) => {
   closePops(); $("si" + b.dataset.i)?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 $("moreBtn").onclick = () => togglePop($("moreMenu"), $("moreBtn"));
-// Recording settings open below their button in the header, right-aligned with it.
-$("recSetBtn").onclick = () => {
-  const menu = $("recMenu"), btn = $("recSetBtn"), was = menu.classList.contains("open");
-  closePops(); if (was) return;
+// The header's menus open below their button: the lecture picker left-aligned with it, the
+// recording settings right-aligned. A second click closes. Returns whether it opened.
+function headerMenu(menu, btn, right, fill) {
+  const was = menu.classList.contains("open");
+  closePops(); if (was) return false;
+  fill?.();
   menu.opener = btn; menu.classList.add("open"); btn.classList.add("open");
-  const r = btn.getBoundingClientRect();
+  const r = btn.getBoundingClientRect(), w = menu.offsetWidth;
   menu.style.top = (r.bottom + 6) + "px";
-  menu.style.left = Math.max(12, Math.min(r.right - menu.offsetWidth, innerWidth - menu.offsetWidth - 12)) + "px";
+  menu.style.left = Math.max(12, Math.min(right ? r.right - w : r.left, innerWidth - w - 12)) + "px";
+  return true;
+}
+$("recSetBtn").onclick = () => headerMenu($("recMenu"), $("recSetBtn"), true);
+
+/* ---------- the lecture picker (top left): past lectures, newest first, with a search ---------- */
+let recentList = [], lecAct = -1;
+// "2026-11-17 09.28 Networks" → { title: "Networks", when: "Today, 09:28" }
+function lecParts(name) {
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2})\.(\d{2}) (.*)$/.exec(name);
+  if (!m) return { title: name, when: "" };
+  const d = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]), now = new Date();
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const ago = Math.round((day(now) - day(d)) / 864e5);
+  const date = ago === 0 ? "Today" : ago === 1 ? "Yesterday"
+    : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+  return { title: m[6], when: date + ", " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
+}
+// `text` with every search word in it marked.
+function marked(text, words) {
+  const f = document.createDocumentFragment(), low = text.toLowerCase(), on = [...text].map(() => false);
+  for (const w of words) for (let i = low.indexOf(w); i >= 0; i = low.indexOf(w, i + w.length)) for (let j = i; j < i + w.length; j++) on[j] = true;
+  for (let i = 0, j; i < text.length; i = j) {
+    for (j = i; j < text.length && on[j] === on[i]; j++);
+    const t = document.createTextNode(text.slice(i, j));
+    if (on[i]) { const m = document.createElement("mark"); m.append(t); f.append(m); } else f.append(t);
+  }
+  return f;
+}
+function fillLecMenu() {
+  const words = $("lecFilter").value.toLowerCase().split(/\s+/).filter(Boolean), busy = state !== "idle";
+  const items = recentList.map((x) => ({ ...x, ...lecParts(x.name) }))
+    .filter((x) => words.every((w) => (x.title + " " + x.when + " " + x.name).toLowerCase().includes(w)));
+  const L = $("lecList"); L.textContent = ""; $("lecNew").disabled = busy;
+  if (busy && items.length) L.insertAdjacentHTML("beforeend", '<div class="note">Stop the recording to open another lecture.</div>');
+  for (const x of items) {
+    const b = document.createElement("button");
+    b.dataset.path = x.path; b.disabled = busy; b.setAttribute("role", "option");
+    b.innerHTML = `<span class="ok">${x.path === curPath ? OK_SVG : ""}</span><span class="t"></span><span class="k"></span>`;
+    b.querySelector(".t").append(marked(x.title, words)); b.querySelector(".k").textContent = x.when;
+    L.append(b);
+  }
+  if (!items.length) L.insertAdjacentHTML("beforeend", `<div class="note">${recentList.length ? "No lecture matches." : "No lectures yet. Press Start to record one."}</div>`);
+  lecActivate(items.length && !busy ? 0 : -1);
+}
+const lecRows = () => [...$("lecList").querySelectorAll("button")];
+function lecActivate(i, scroll) {
+  const bs = lecRows(); lecAct = i;
+  bs.forEach((b, k) => b.classList.toggle("act", k === i));
+  if (scroll) bs[i]?.scrollIntoView({ block: "nearest" });
+}
+function openLecture(b) {
+  if (!b || b.disabled) return;
+  closePops();
+  if (b.dataset.path !== curPath) send("loadTranscript", { path: b.dataset.path });
+}
+function showFile(path, note) {
+  $("lecFile").textContent = path ? path.split("/").pop().replace(/\.md$/, "") : "No lecture open";
+  $("lecReveal").style.display = path ? "" : "none";
+  $("lecReveal").dataset.path = path || "";
+  $("saved").innerHTML = note ? '<span class="dot"></span>' : ""; if (note) $("saved").append(note);
+}
+function openLecMenu() {
+  $("lecFilter").value = "";
+  if (headerMenu($("lecMenu"), $("lecName"), false, fillLecMenu)) { send("recentList"); $("lecFilter").focus(); }
+}
+// Read-only (a picker) while a lecture is open or recording; a field for a new lecture's name.
+function renderLecName(p = curPath) {
+  const pick = !!p || state !== "idle", t = $("title");
+  if (t.readOnly === pick && $("lecName").classList.contains("pick") === pick) return;
+  t.readOnly = pick; t.tabIndex = pick ? -1 : 0; $("lecName").classList.toggle("pick", pick);
+  $("lecName").title = pick ? "Open a lecture (⌘O)" : "";
+  t.placeholder = pick ? "Untitled lecture" : "Lecture title (e.g. Networks – DHCP)";
+  if (pick && document.activeElement === t) t.blur();
+  fitTitle();
+}
+// On the name: the field takes the click when it's editable; otherwise the click opens the menu.
+$("lecName").onmousedown = (e) => { if (e.target === $("title") && !$("title").readOnly) return; e.preventDefault(); };
+$("lecName").onclick = (e) => { if (e.target === $("title") && !$("title").readOnly) return; openLecMenu(); };
+// New lecture: an empty page whose name is typed in the header, recorded with Start.
+$("lecNew").onclick = () => {
+  if (state !== "idle") return;
+  closePops();
+  clearTranscript(); showFile(null);
+  elapsed = 0; runStart = null; follow = true;
+  setCurPath(null);
+  $("title").value = ""; $("empty").style.display = "";
+  render(); $("title").focus();
 };
+$("lecFilter").oninput = fillLecMenu;
+$("lecFilter").onkeydown = (e) => {
+  const n = lecRows().length;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (n && !lecRows()[0].disabled) lecActivate(Math.max(0, Math.min(n - 1, lecAct + (e.key === "ArrowDown" ? 1 : -1))), true); }
+  else if (e.key === "Enter") { e.preventDefault(); openLecture(lecRows()[lecAct]); }
+};
+$("lecList").onmousemove = (e) => { const b = e.target.closest("button"); if (b && !b.disabled) lecActivate(lecRows().indexOf(b)); };
+$("lecList").onclick = (e) => openLecture(e.target.closest("button[data-path]"));
+$("lecReveal").onclick = () => { const p = $("lecReveal").dataset.path; if (p) send("reveal", { path: p }); };
+showFile(null);
 $("moreMenu").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && b.id !== "smaller" && b.id !== "bigger") closePops(); });
 
 $("tabSlides").onclick = () => { docsOpen = false; glossOpen = setOpen = false; renderGloss(); };
@@ -1369,8 +1495,7 @@ window.onEngine = (e) => {
       if ([...$("slideLang").options].some((o) => o.value === settings.slideLang)) $("slideLang").value = settings.slideLang;
       setThemes(e.themes, settings.theme);
       $("themeCss").textContent = e.themeCss || "";
-      const r = $("recent"); r.length = 1;
-      for (const x of e.recent || []) r.add(new Option(x.name, x.path));
+      recentList = e.recent || [];
       $("modelWrap").style.display = models.length > 1 ? "" : "none";
       if (!models.length) {
         $("empty").innerHTML = "The speech model isn't on this Mac yet.<br><br><button onclick=\"openSetup(1)\">Set up</button>";
@@ -1465,24 +1590,16 @@ window.onEngine = (e) => {
     }
     case "notice": toast(e.message); break;
     case "error": toast(e.message, true); break;
+    case "recent": recentList = e.recent || []; if ($("lecMenu").classList.contains("open")) fillLecMenu(); break;
     case "autosaved": {
       setCurPath(e.path);
-      const name = e.path.split("/").pop();
-      const s = $("saved");
-      s.innerHTML = " · <span style='color:var(--app-ok)'>●</span> Autosaved " +
-        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " to <a id='openT'></a>";
-      $("openT").textContent = name;
-      $("openT").onclick = () => send("reveal", { path: e.path });
+      showFile(e.path, "Autosaved " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       break;
     }
     case "saved": {
       setCurPath(e.transcript);
-      const name = e.transcript.split("/").pop();
-      const s = $("saved"); s.innerHTML = " · <span style='color:var(--app-ok)'>●</span> Saved <a id='openT'></a> · <a id='revealT'>Show in Finder</a>";
-      $("openT").textContent = name;
-      $("openT").onclick = () => send("open", { path: e.transcript });
-      $("revealT").onclick = () => send("reveal", { path: e.transcript });
-      toast("Transcript saved: " + name);
+      showFile(e.transcript, "Saved");
+      toast("Transcript saved: " + e.transcript.split("/").pop());
       break;
     }
     case "lineEdited": {
@@ -1512,8 +1629,7 @@ window.onEngine = (e) => {
       for (const [t, text] of e.lines) addSeg(t, text, true);
       if (!e.lines.length) $("empty").style.display = "";
       $("scroller").scrollTop = 0; follow = false;
-      const s = $("saved"); s.innerHTML = " · <a id='openT'></a>"; $("openT").textContent = e.path.split("/").pop();
-      $("openT").onclick = () => send("reveal", { path: e.path });
+      showFile(e.path);
       curPath = null; setCurPath(e.path); markFixes();
       break;
     }
@@ -1563,7 +1679,7 @@ setInterval(() => {
 }, 250);
 
 $("startBtn").onclick = () => {
-  clearTranscript(); $("saved").innerHTML = "";
+  clearTranscript(); showFile(null);
   elapsed = 0; runStart = null; follow = true;
   $("empty").style.display = "none";
   setCurPath(null);
@@ -1575,7 +1691,7 @@ $("contBtn").onclick = async () => {
   const name = curPath.split("/").pop().replace(/\.md$/, "");
   if (!await ask(`Continue recording into "${name}"? New lines are added after ${fmt(segs[segs.length - 1].t)}, and its slides pick up from there.`, "Continue recording")) return;
   elapsed = segs[segs.length - 1].t; runStart = null; follow = true;
-  $("empty").style.display = "none"; $("saved").innerHTML = "";
+  $("empty").style.display = "none"; showFile(null);
   const m = curModel();
   send("start", { model: m.path, modelLabel: m.label, device: $("device").value, language: $("lang").value,
     title: $("title").value, saveAudio: $("saveAudio").checked, course: $("course").value, continue: curPath });
@@ -1588,11 +1704,10 @@ $("folderBtn").onclick = () => send("openFolder");
 function fitTitle() {
   const t = $("title"), c = fitTitle.c || (fitTitle.c = document.createElement("canvas").getContext("2d"));
   c.font = getComputedStyle(t).font;
-  t.style.width = Math.ceil(c.measureText(t.value || t.placeholder).width + 16) + "px";
+  t.style.width = Math.ceil(c.measureText(t.value || t.placeholder).width + (t.readOnly ? 4 : 16)) + "px";
 }
 $("title").addEventListener("input", fitTitle);
 fitTitle();
-$("recent").onchange = () => { const p = $("recent").value; $("recent").value = ""; if (p) send("loadTranscript", { path: p }); };
 $("model").onchange = () => { persist(); modelReady = false; render(); send("preload", { model: $("model").value }); };
 for (const id of ["device", "lang", "saveAudio"]) $(id).onchange = () => { persist(); render(); };
 /* ---------- first-run setup ---------- */
@@ -1771,6 +1886,8 @@ document.addEventListener("keydown", (ev) => {
     ev.preventDefault();
     if (ev.shiftKey) return cmpMode === "next" ? sendComposer() : makeSlides("next");
     if (state === "idle") $("startBtn").click(); else $("stopBtn").click();
+  } else if (ev.metaKey && ev.key === "o" && !$("setup").classList.contains("on")) {
+    ev.preventDefault(); if (!$("lecMenu").classList.contains("open")) openLecMenu();
   } else if (ev.metaKey && ev.key === ",") { ev.preventDefault(); if (!$("setup").classList.contains("on")) $("setBtn").click(); }
   else if (ev.key === "Escape" && !$("setup").classList.contains("on")) {
     if (document.querySelector(".pop.open")) closePops();
