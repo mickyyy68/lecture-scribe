@@ -40,6 +40,8 @@ pub struct StartOpts {
     pub out_dir: PathBuf,
     /// Course name: picks the glossary whose corrections are applied live.
     pub course: String,
+    /// Keep recording into this existing transcript (and its WAV), with times continuing after it.
+    pub continue_path: Option<PathBuf>,
 }
 
 pub enum Cmd {
@@ -200,12 +202,21 @@ impl Worker {
             .chars()
             .map(|c| if "/\\:*?\"<>|".contains(c) { '-' } else { c })
             .collect();
-        let stem = unique_stem(&o.out_dir, &format!("{} {}", now.format("%Y-%m-%d %H.%M"), safe));
-        let transcript_path = o.out_dir.join(format!("{stem}.md"));
-        let body = format!("# {title}\n\n_{}_ · {}\n\n", now.format("%A %-d %B %Y, %H:%M"), o.model_label);
+        let (transcript_path, body, wav, offset) = match &o.continue_path {
+            Some(p) => continue_files(p, o.save_audio, &now, &o.model_label)?,
+            None => {
+                let stem = unique_stem(&o.out_dir, &format!("{} {}", now.format("%Y-%m-%d %H.%M"), safe));
+                let transcript_path = o.out_dir.join(format!("{stem}.md"));
+                let body = format!("# {title}\n\n_{}_ · {}\n\n", now.format("%A %-d %B %Y, %H:%M"), o.model_label);
+                (transcript_path, body, None, None)
+            }
+        };
         write_atomic(&transcript_path, &body).map_err(|e| format!("Could not create transcript file: {e}"))?;
+        let stem = transcript_path.file_stem().unwrap_or_default().to_string_lossy().to_string();
 
-        let wav = if o.save_audio {
+        let wav = if let Some(w) = wav {
+            Some(w)
+        } else if o.save_audio && offset.is_none() {
             let p = o.out_dir.join(format!("{stem}.wav"));
             let spec = hound::WavSpec { channels: 1, sample_rate: TARGET_RATE, bits_per_sample: 16, sample_format: hound::SampleFormat::Int };
             Some((p.clone(), hound::WavWriter::create(&p, spec).map_err(|e| e.to_string())?))
@@ -249,7 +260,7 @@ impl Worker {
             caffeinate,
             utt: Vec::new(),
             utt_frames: Vec::new(),
-            utt_start: 0,
+            utt_start: offset.unwrap_or(0),
             floor_db: -60.0,
             since_partial: 0,
             last_partial: String::new(),
@@ -537,6 +548,44 @@ fn write_atomic(path: &Path, content: &str) -> std::io::Result<()> {
     let tmp = path.with_extension("md.tmp");
     std::fs::write(&tmp, content)?;
     std::fs::rename(&tmp, path)
+}
+
+/// Opens an existing lecture to record more of it. Times continue from the end of its audio
+/// (so the WAV stays in sync), or a few seconds after its last line when there is no WAV.
+#[allow(clippy::type_complexity)]
+fn continue_files(
+    p: &Path,
+    save_audio: bool,
+    now: &chrono::DateTime<chrono::Local>,
+    model_label: &str,
+) -> Result<(PathBuf, String, Option<(PathBuf, hound::WavWriter<std::io::BufWriter<std::fs::File>>)>, Option<u64>), String> {
+    let mut body = std::fs::read_to_string(p).map_err(|e| format!("Could not read the transcript: {e}"))?;
+    let last = crate::slides::parse_transcript(&body).1.last().map(|(t, _)| secs(t)).unwrap_or(0);
+    let mut offset = (last + 5) * TARGET_RATE as u64;
+    let wav_path = p.with_extension("wav");
+    let mut wav = None;
+    if save_audio && wav_path.exists() {
+        let ok = hound::WavReader::open(&wav_path).ok().filter(|r| {
+            let s = r.spec();
+            s.channels == 1 && s.sample_rate == TARGET_RATE && s.bits_per_sample == 16 && s.sample_format == hound::SampleFormat::Int
+        });
+        if let Some(r) = ok {
+            let n = r.duration() as u64;
+            drop(r);
+            let w = hound::WavWriter::append(&wav_path).map_err(|e| format!("Could not open the audio to continue it: {e}"))?;
+            offset = n; // the audio holds the whole lecture so far: times stay in sync with it
+            wav = Some((wav_path, w));
+        }
+    }
+    while !body.ends_with("\n\n") {
+        body.push('\n');
+    }
+    body.push_str(&format!("_Continued {} · {}_\n\n", now.format("%A %-d %B %Y, %H:%M"), model_label));
+    Ok((p.to_path_buf(), body, wav, Some(offset)))
+}
+
+fn secs(t: &str) -> u64 {
+    t.split(':').fold(0, |a, x| a * 60 + x.trim().parse::<u64>().unwrap_or(0))
 }
 
 fn unique_stem(dir: &Path, stem: &str) -> String {

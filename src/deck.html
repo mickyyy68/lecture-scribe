@@ -1,11 +1,13 @@
 <!doctype html>
-<html lang="it" data-theme="light">
+<html lang="{{LANG}}" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{TITLE}}</title>
 <style>{{BUNDLE}}</style>
 <style>{{TOKENS}}</style>
+<style>{{THEME}}</style>
+<style>{{KATEX_CSS}}</style>
 <style>{{SLIDES_CSS}}</style>
 <style>
   body { margin: 0; }
@@ -24,14 +26,16 @@
 </style>
 </head>
 <body>
-<header class="top"><h1>{{TITLE}}</h1><p>Clicca una slide o premi P per presentare · ← → per scorrere · Esc per uscire</p></header>
+<header class="top"><h1>{{TITLE}}</h1><p id="hint"></p></header>
 <main class="deck" id="deck"></main>
 <div class="present" id="present"><div class="fr" id="pfr"></div></div>
+<script>{{KATEX_JS}}</script>
 <script>{{SLIDES_JS}}</script>
 <script>
 const DATA = {{DATA}};
 const FOOT = {{FOOT}};
 const n = DATA.length;
+document.getElementById("hint").textContent = slideLabel("hint");
 const deck = document.getElementById("deck");
 deck.innerHTML = DATA.map((s, i) => `<section><div class="fr" data-i="${i}">${renderSlide(s, i + 1, n, FOOT)}</div>` +
   `<div class="meta"><span>${[s.from, s.to].filter(Boolean).join(" – ")}</span></div>` +

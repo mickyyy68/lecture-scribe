@@ -1,5 +1,6 @@
-use lecture_scribe::engine::{self, Cmd, Event, Source, StartOpts};
-use lecture_scribe::{audio, glossary, material, models, slides};
+use transcribe_lecture::engine::{self, Cmd, Event, Source, StartOpts};
+use transcribe_lecture::paths::{self, out_dir};
+use transcribe_lecture::{audio, glossary, material, models, slides, theme};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use tao::{
@@ -10,51 +11,51 @@ use tao::{
 };
 use wry::WebViewBuilder;
 
-/// The window's page: ui.html with the design system and slide renderer inlined.
+/// The window's page: ui.html with the slide theme and renderer inlined. The chosen custom theme
+/// is applied by the page itself (`init` carries its CSS), so it can change without a reload.
 fn ui() -> String {
     include_str!("ui.html")
-        .replace("/*BUNDLE_CSS*/", slides::BUNDLE_CSS)
-        .replace("/*TOKENS_CSS*/", slides::TOKENS_CSS)
+        .replace("/*BUNDLE_CSS*/", theme::BASE_CSS)
+        .replace("/*TOKENS_CSS*/", theme::DEFAULT_CSS)
         .replace("/*SLIDES_CSS*/", slides::SLIDES_CSS)
         .replace("/*SLIDES_JS*/", slides::SLIDES_JS)
+        .replace("/*KATEX_CSS*/", slides::KATEX_CSS)
+        .replace("/*KATEX_JS*/", slides::KATEX_JS)
+        .replace("/*CLAUDE_SVG*/", include_str!("claude-symbol.svg").trim())
 }
 
 static SLIDES_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-fn out_dir() -> PathBuf {
-    dirs::document_dir().unwrap_or_else(|| dirs::home_dir().unwrap()).join("Lecture Transcripts")
-}
-
-fn settings_path() -> PathBuf {
-    dirs::config_dir().unwrap().join("Lecture Scribe").join("settings.json")
-}
-
-fn load_settings() -> Value {
-    std::fs::read_to_string(settings_path())
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or(json!({}))
-}
+static DOWNLOADING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn init_payload() -> Value {
+    let settings = paths::load_settings();
     json!({
         "type": "init",
         "models": models::discover(),
+        "modelBytes": models::DOWNLOAD_BYTES,
         "devices": audio::input_device_names(),
         "defaultDevice": audio::default_device_name(),
-        "settings": load_settings(),
+        "themeCss": theme::css(settings["theme"].as_str().unwrap_or("")),
+        "themes": theme::list(),
+        "settings": settings,
         "outDir": out_dir().to_string_lossy(),
         "recent": slides::recent(&out_dir()),
     })
 }
 
 fn main() {
-    if std::env::var_os("LECTURE_SCRIBE_DEBUG").is_none() {
+    let args: Vec<String> = std::env::args().collect();
+    // Claude Code starts this to search the course PDFs (see slides::run_claude). Nothing else
+    // may write to stdout here, so it runs before the transcription engine is set up.
+    if args.iter().any(|a| a == "--mcp-material") {
+        let course = args.iter().position(|a| a == "--course").and_then(|j| args.get(j + 1)).cloned().unwrap_or_default();
+        return material::serve_mcp(&course);
+    }
+    if std::env::var_os("TRANSCRIBE_LECTURE_DEBUG").is_none() {
         transcribe_cpp::disable_logging();
     }
     transcribe_cpp::init_backends_default().expect("init ggml backends");
-    let args: Vec<String> = std::env::args().collect();
-    // Headless: `lecture-scribe --add-pdf file.pdf [--course "Protocolli e reti"]`
+    // Headless: `transcribe-lecture --add-pdf file.pdf [--course "Networks"]`
     if let Some(i) = args.iter().position(|a| a == "--add-pdf") {
         let course = args.iter().position(|a| a == "--course").map(|j| args[j + 1].clone()).unwrap_or_default();
         match material::add(&course, std::path::Path::new(&args[i + 1])) {
@@ -63,11 +64,20 @@ fn main() {
         }
         return;
     }
-    // Headless: `lecture-scribe --slides transcript.md [--course "Protocolli e reti"]`
+    // Headless: `transcribe-lecture --slides transcript.md [--course "Networks"] [--model opus] [--effort high] [--lang it]`
     if let Some(i) = args.iter().position(|a| a == "--slides") {
         let course = args.iter().position(|a| a == "--course").map(|j| args[j + 1].clone()).unwrap_or_default();
-        let rebuild = args.iter().any(|a| a == "--rebuild");
-        match slides::generate(std::path::Path::new(&args[i + 1]), &course, rebuild) {
+        let model = args.iter().position(|a| a == "--model").map(|j| args[j + 1].clone()).unwrap_or_else(|| slides::DEFAULT_MODEL.into());
+        let effort = args.iter().position(|a| a == "--effort").map(|j| args[j + 1].clone()).unwrap_or_else(|| slides::DEFAULT_EFFORT.into());
+        let lang = args.iter().position(|a| a == "--lang").map(|j| args[j + 1].clone()).unwrap_or_default();
+        let mode = if args.iter().any(|a| a == "--rebuild") {
+            slides::Mode::Rebuild
+        } else if args.iter().any(|a| a == "--review") {
+            slides::Mode::Review
+        } else {
+            slides::Mode::Next
+        };
+        match slides::generate(std::path::Path::new(&args[i + 1]), &course, mode, &model, &effort, &lang) {
             Ok(v) => println!(
                 "{} slides (+{}, replaced last: {}, flagged: {}) · usage {}",
                 v["slides"].as_array().map_or(0, |a| a.len()),
@@ -77,6 +87,24 @@ fn main() {
                 v["usage"]
             ),
             Err(e) => eprintln!("error: {e}"),
+        }
+        return;
+    }
+    // Headless: `transcribe-lecture --make-theme "Name" "description" [--model opus]`
+    if let Some(i) = args.iter().position(|a| a == "--make-theme") {
+        let (name, description) = (args.get(i + 1).cloned().unwrap_or_default(), args.get(i + 2).cloned().unwrap_or_default());
+        let model = args.iter().position(|a| a == "--model").map(|j| args[j + 1].clone()).unwrap_or_else(|| slides::DEFAULT_MODEL.into());
+        match theme::create(&name, &description, &model) {
+            Ok(v) => println!("saved {}", theme::dir().join(format!("{}.css", v["name"].as_str().unwrap_or(""))).display()),
+            Err(e) => eprintln!("error: {e}"),
+        }
+        return;
+    }
+    // Headless: `transcribe-lecture --download-model`
+    if args.iter().any(|a| a == "--download-model") {
+        match models::download(&|n| eprint!("\r{:.0} / {:.0} MB", n as f64 / 1e6, models::DOWNLOAD_BYTES as f64 / 1e6)) {
+            Ok(p) => println!("\nsaved {}", p.display()),
+            Err(e) => eprintln!("\nerror: {e}"),
         }
         return;
     }
@@ -96,7 +124,7 @@ fn main() {
     let tx = engine.tx.clone();
 
     let window = WindowBuilder::new()
-        .with_title("Lecture Scribe")
+        .with_title(paths::APP_NAME)
         .with_inner_size(LogicalSize::new(980.0, 760.0))
         .with_min_inner_size(LogicalSize::new(560.0, 420.0))
         .build(&event_loop)
@@ -128,6 +156,7 @@ fn main() {
                         save_audio: msg["saveAudio"].as_bool().unwrap_or(true),
                         out_dir: out_dir(),
                         course: s("course"),
+                        continue_path: Some(s("continue")).filter(|p| !p.is_empty()).map(PathBuf::from),
                     }));
                 }
                 "pause" => {
@@ -150,16 +179,18 @@ fn main() {
                     let _ = std::fs::create_dir_all(&d);
                     let _ = std::process::Command::new("open").arg(d).spawn();
                 }
-                // Slides: DeepSeek runs on its own thread; the result comes back as an event.
+                // Slides: Claude Code runs on its own thread; the result comes back as an event.
                 "slides" => {
                     use std::sync::atomic::Ordering;
                     if SLIDES_BUSY.swap(true, Ordering::SeqCst) {
                         return;
                     }
                     let (path, course, proxy) = (PathBuf::from(s("path")), s("course"), ipc_proxy.clone());
-                    let rebuild = msg["rebuild"].as_bool().unwrap_or(false);
+                    let mode = if msg["rebuild"].as_bool() == Some(true) { slides::Mode::Rebuild } else { slides::Mode::parse(&s("mode")) };
+                    let (model, effort) = (s("model"), s("effort"));
+                    let lang = s("lang");
                     std::thread::spawn(move || {
-                        let r = slides::generate(&path, &course, rebuild);
+                        let r = slides::generate(&path, &course, mode, &model, &effort, &lang);
                         SLIDES_BUSY.store(false, Ordering::SeqCst);
                         let ev = r.unwrap_or_else(|e| json!({ "type": "slidesError", "message": e, "path": path.to_string_lossy() }));
                         let _ = proxy.send_event(ev.to_string());
@@ -209,8 +240,81 @@ fn main() {
                         .unwrap_or_else(|e| json!({ "type": "error", "message": e }));
                     let _ = ipc_proxy.send_event(ev.to_string());
                 }
+                // Theme chosen: its CSS for the page, and the open deck's HTML is written again.
+                "theme" => {
+                    let path = s("path");
+                    if !path.is_empty() {
+                        let _ = slides::export(std::path::Path::new(&path));
+                    }
+                    let ev = json!({ "type": "theme", "name": s("name"), "css": theme::css(&s("name")), "themes": theme::list() });
+                    let _ = ipc_proxy.send_event(ev.to_string());
+                }
+                "themeCreate" => {
+                    let (name, description, proxy) = (s("name"), s("description"), ipc_proxy.clone());
+                    let model = Some(s("model")).filter(|m| slides::MODELS.contains(&m.as_str())).unwrap_or_else(|| slides::DEFAULT_MODEL.into());
+                    std::thread::spawn(move || {
+                        let ev = match theme::create(&name, &description, &model) {
+                            Ok(mut v) => {
+                                v["type"] = json!("themeCreated");
+                                v
+                            }
+                            Err(e) => json!({ "type": "themeError", "message": e }),
+                        };
+                        let _ = proxy.send_event(ev.to_string());
+                    });
+                }
+                "themeDelete" => {
+                    let ev = match theme::delete(&s("name")) {
+                        Ok(()) => json!({ "type": "theme", "name": "", "css": "", "themes": theme::list() }),
+                        Err(e) => json!({ "type": "themeError", "message": e }),
+                    };
+                    let _ = ipc_proxy.send_event(ev.to_string());
+                }
+                "openThemes" => {
+                    let d = theme::dir();
+                    let _ = std::fs::create_dir_all(&d);
+                    let _ = std::process::Command::new("open").arg(d).spawn();
+                }
+                // Setup: download the speech model, test the microphone, look for Claude Code.
+                "downloadModel" => {
+                    use std::sync::atomic::Ordering;
+                    if DOWNLOADING.swap(true, Ordering::SeqCst) {
+                        return;
+                    }
+                    let proxy = ipc_proxy.clone();
+                    std::thread::spawn(move || {
+                        let p2 = proxy.clone();
+                        let r = models::download(&move |n| {
+                            let _ = p2.send_event(json!({ "type": "modelProgress", "done": n, "total": models::DOWNLOAD_BYTES }).to_string());
+                        });
+                        DOWNLOADING.store(false, Ordering::SeqCst);
+                        let ev = match r {
+                            Ok(_) => json!({ "type": "modelDownloaded" }),
+                            Err(e) => json!({ "type": "modelDownloadError", "message": e }),
+                        };
+                        let _ = proxy.send_event(ev.to_string());
+                        let _ = proxy.send_event(init_payload().to_string());
+                    });
+                }
+                "micTest" => {
+                    let (device, proxy) = (s("device"), ipc_proxy.clone());
+                    std::thread::spawn(move || {
+                        let ev = match audio::test_level(Some(&device).filter(|d| !d.is_empty()).map(|d| d.as_str()), 3.0) {
+                            Ok(db) => json!({ "type": "micTest", "db": db }),
+                            Err(e) => json!({ "type": "micTest", "error": e }),
+                        };
+                        let _ = proxy.send_event(ev.to_string());
+                    });
+                }
+                "checkClaude" => {
+                    let proxy = ipc_proxy.clone();
+                    std::thread::spawn(move || {
+                        let version = slides::claude_bin().and_then(|b| std::process::Command::new(b).arg("--version").output().ok()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+                        let _ = proxy.send_event(json!({ "type": "claudeCheck", "found": version.is_some(), "version": version }).to_string());
+                    });
+                }
                 "saveSettings" => {
-                    let p = settings_path();
+                    let p = paths::settings_path();
                     let _ = std::fs::create_dir_all(p.parent().unwrap());
                     let _ = std::fs::write(p, msg["settings"].to_string());
                 }
@@ -252,7 +356,7 @@ return out"#;
         .unwrap_or_default()
 }
 
-/// Headless test: `lecture-scribe --simulate file.wav [--model path] [--speed N] [--lang it]`
+/// Headless test: `transcribe-lecture --simulate file.wav [--model path] [--speed N] [--lang it]`
 fn simulate(args: &[String], i: usize) {
     let wav = PathBuf::from(&args[i + 1]);
     let opt = |k: &str| args.iter().position(|a| a == k).map(|j| args[j + 1].clone());
@@ -279,9 +383,10 @@ fn simulate(args: &[String], i: usize) {
         model_label: model,
         language: opt("--lang"),
         title: "Simulation".into(),
-        save_audio: false,
-        out_dir: std::env::temp_dir().join("lecture-scribe-sim"),
+        save_audio: opt("--continue").is_some(), // only appends to an existing WAV
+        out_dir: std::env::temp_dir().join("transcribe-lecture-sim"),
         course: opt("--course").unwrap_or_default(),
+        continue_path: opt("--continue").map(PathBuf::from),
     }));
     let _ = done_rx.recv();
     engine.shutdown();

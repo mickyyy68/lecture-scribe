@@ -1,7 +1,12 @@
 [package]
-name = "lecture-scribe"
+name = "transcribe-lecture"
 version = "0.1.0"
 edition = "2024"
+description = "Live, on-device lecture transcription for macOS, with slides made from what was said"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["transcription", "speech-to-text", "parakeet", "lecture", "macos"]
+publish = false
 
 [dependencies]
 chrono = "0.4.45"

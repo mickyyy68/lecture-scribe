@@ -1209,24 +1209,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lecture-scribe"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "cpal",
- "crossbeam-channel",
- "dirs",
- "hound",
- "objc2",
- "objc2-foundation",
- "serde",
- "serde_json",
- "tao",
- "transcribe-cpp",
- "wry",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2404,6 +2386,24 @@ checksum = "32f94fb1e9a3033101bbd500d02993cfc95e315f24417038fd42f1fd80e1059a"
 dependencies = [
  "cmake",
  "serde_json",
+]
+
+[[package]]
+name = "transcribe-lecture"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "cpal",
+ "crossbeam-channel",
+ "dirs",
+ "hound",
+ "objc2",
+ "objc2-foundation",
+ "serde",
+ "serde_json",
+ "tao",
+ "transcribe-cpp",
+ "wry",
 ]
 
 [[package]]

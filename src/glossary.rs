@@ -1,10 +1,10 @@
-//! Per-course glossary that DeepSeek fills in when it makes slides.
+//! Per-course glossary that the slide model fills in when it makes slides.
 //!
 //! `corrections` are misrecognitions ("HCB" → "DHCP") that the engine fixes live in new
-//! transcripts; `terms` are the course's key terms, sent back to DeepSeek as context. Parakeet
+//! transcripts; `terms` are the course's key terms, sent back to the model as context. Parakeet
 //! has no vocabulary biasing, so this is post-correction, like Handy's custom words.
 //!
-//! Stored in ~/Library/Application Support/Lecture Scribe/glossary/<course>.json
+//! Stored in <data dir>/glossary/<course>.json (see `paths::data_dir`).
 
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -26,7 +26,7 @@ pub fn slug(course: &str) -> String {
 }
 
 pub fn path(course: &str) -> PathBuf {
-    dirs::config_dir().unwrap_or_else(std::env::temp_dir).join("Lecture Scribe").join("glossary").join(format!("{}.json", slug(course)))
+    crate::paths::data_dir().join("glossary").join(format!("{}.json", slug(course)))
 }
 
 pub fn load(course: &str) -> Value {
@@ -46,7 +46,7 @@ fn save(course: &str, v: &Value) -> Result<(), String> {
     std::fs::write(&tmp, serde_json::to_string_pretty(v).unwrap()).and_then(|_| std::fs::rename(&tmp, &p)).map_err(|e| e.to_string())
 }
 
-/// Adds DeepSeek's suggestions; returns how many corrections and terms were new.
+/// Adds the model's suggestions; returns how many corrections and terms were new.
 pub fn merge(course: &str, suggested: &Value) -> (usize, usize) {
     let mut g = load(course);
     let today = chrono::Local::now().format("%Y-%m-%d").to_string();

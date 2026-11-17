@@ -1,74 +1,110 @@
 # AGENTS.md
 
-Lecture Scribe is a macOS app (Rust, tao + wry webview). It transcribes lectures live on the Mac with Handy's Parakeet GGUF models (`transcribe-cpp`, Metal). It also turns the transcript into slides in the "Protocolli & Reti" design system through the DeepSeek API, on demand. The user is a student. Lectures, prompts and slides are in Italian; UI chrome is in English. Read `README.md` for the user-facing behaviour.
+Transcribe Lecture is a macOS app written in Rust, using tao and wry for the window and webview. It transcribes lectures live on the Mac with Parakeet GGUF models (`transcribe-cpp`, Metal). On demand, it turns the transcript into slides through Claude Code (`claude -p`) on the user's Claude subscription. The UI is in English. Slides are written in the language chosen in Settings, which by default is the lecture's language. Read `README.md` for the user-facing behaviour.
 
-## The running app is sacred
+## Never interrupt a recording
 
-The user records real lectures with the installed app (`~/Applications/Lecture Scribe.app`). A lost recording can't be redone.
+People record real lectures with the installed app, and a lost recording can't be redone.
 
-- **Never quit, kill, relaunch or reinstall the app** unless the user says no lecture is being recorded. Check first with `pgrep -fl "Lecture Scribe.app"`.
-- **`./bundle.sh` installs.** It replaces `~/Applications/Lecture Scribe.app`. Run it only when the user asks to install. Don't pipe or background it "just to build".
-- To build without installing, use the command below. Use `nice` and `-j 2` while a lecture may be recording, so transcription isn't starved:
+- **Never quit, kill, relaunch or reinstall the app** unless the user says no lecture is being recorded.
+  - Check first with `pgrep -fl "Transcribe Lecture.app|Lecture Scribe.app"`.
+  - "Lecture Scribe" is the app's old name, and that build may still be installed and running.
+- **`./bundle.sh --install` replaces `~/Applications/Transcribe Lecture.app`.** Run it only when the user asks to install. It refuses while the app is open.
+- Plain `./bundle.sh` only builds `target/Transcribe Lecture.app`.
+- While a lecture may be recording, build with `nice` and `-j 2` so transcription isn't starved:
 
   ```sh
-  SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk nice -n 20 cargo build --release -j 2
+  nice -n 20 cargo build --release -j 2
   ```
 
-  `SDKROOT` is required: the macOS 27 SDK's `libSystem.tbd` can't be read by the current linker.
-- The new binary is `target/release/lecture-scribe`. Its headless modes can be tested while the installed app keeps recording.
+  On a Mac whose linker can't read the newest SDK, prefix the build with an older SDK, e.g. `SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk`.
+- The binary is `target/release/transcribe-lecture`. Its headless modes can be tested while the installed app keeps recording.
 
 ## Map
 
 | File | What |
 |---|---|
-| `src/engine.rs` | Recording worker: utterance splitting, Parakeet calls, live partials. Rewrites the transcript `.md` atomically on every change. Applies glossary corrections. |
+| `src/engine.rs` | Recording worker: utterance splitting, Parakeet calls, live partials, Continue (appending to an existing transcript and WAV). Rewrites the transcript `.md` atomically on every change. Applies glossary corrections. |
 | `src/audio.rs` | cpal mic capture and resampling to 16 kHz mono. |
-| `src/models.rs` | Finds Handy's models (`~/Library/Application Support/com.pais.handy/models`, HF cache). |
+| `src/models.rs` | Parakeet V3 only: finds it (`<data dir>/models`, Handy's folder, HF cache) and downloads it (curl, resumable, SHA-256 checked). |
+| `src/paths.rs` | Data folder, transcripts folder, settings. |
 | `src/main.rs` | Window, IPC commands from `ui.html`, headless CLI modes. |
-| `src/ui.html` | Whole UI: transcript left, slide panel right, glossary/PDF view. Plain HTML/JS, no build step. |
-| `src/slides.rs` | DeepSeek request and tool loop, deck storage, fact check, HTML export. |
-| `src/slides_prompt.txt`, `src/slides_prompt_material.txt` | System prompt (Italian). The second part is appended only when the course has PDFs. |
-| `src/slides.js`, `src/slides.css` | Slide renderer. **Shared** by `ui.html` and the exported `deck.html`, so changes must work in both. |
+| `src/ui.html` | The whole UI: transcript on the left, slide panel on the right, the glossary/PDF and Settings panels, and the first-run setup (`#setup`, shown until `settings.onboarded`). Plain HTML/JS, no build step. Write menus as plain `<select>`: `Picker` turns every select into the themed picker and keeps the `<select>` as the source of truth (`.value`, options, `onchange`). |
+| `src/slides.rs` | `run_claude` and the shared `claude_command`, deck storage, fact check and HTML export. |
+| `src/slides_prompt.txt`, `src/slides_prompt_material.txt` | The system prompt, in English. `{course}` and `{language}` are filled in per request. The second file is appended only when the course has PDFs. |
+| `src/slides.js`, `src/slides.css` | Slide renderer. **Shared** by `ui.html` and the exported deck, so changes must work in both. Fixed labels ("Definition", "sketch", …) come from `LABELS`, keyed by `<html lang>`, with English as the fallback. |
 | `src/deck.html` | Template of the exported `<lecture> · Slide.html` (present/print). |
+| `src/theme/base.css` | Slide structure (`.pr-*` classes and the type scale). Uses tokens only, never literal colours or fonts. |
+| `src/theme/default.css` | The default theme: every token, light and dark. System fonts only, so it works offline. |
+| `src/claude-symbol.svg` | Claude symbol shown beside the model menu (Wikimedia Commons, CC0; Anthropic trademark, so use it only to mean "made by Claude"). Inlined into `ui.html` as `/*CLAUDE_SVG*/`. |
+| `src/theme.rs`, `src/theme_prompt.txt` | Custom themes: list, load, delete, and `create` (Claude Code writes one from a description). |
 | `src/glossary.rs` | Per-course ASR corrections and terms. |
-| `src/material.rs` | Course PDFs: PDFKit extraction (objc2), index, `search_material` / `read_page` tools. |
-| `src/ds/` | The user's design system, **generated elsewhere ("Non modificare a mano")**. Don't edit. Put slide-specific styling in `src/slides.css`. |
-| `notes/` | Superseded Python "Appunti" companion. Don't extend it. |
+| `src/material.rs` | Course PDFs: PDFKit extraction (objc2), index, `search_material`/`read_page` tools, and the MCP server Claude Code uses for them (`--mcp-material`). |
+| `assets/icon.svg`, `assets/AppIcon.icns` | The app icon. Edit the SVG, then run `scripts/make_icon.sh` (headless Chrome + `iconutil`) to regenerate the `.icns`, which `bundle.sh` copies into the app. |
+| `src/katex/` | KaTeX, vendored with fonts inlined. Generated by `scripts/vendor_katex.py`; don't edit. Exported decks include it only when they contain math. |
 
-`main.rs::ui()` inlines CSS/JS into `ui.html` by replacing the `/*BUNDLE_CSS*/`, `/*TOKENS_CSS*/`, `/*SLIDES_CSS*/` and `/*SLIDES_JS*/` placeholders. `slides.rs::save()` fills `{{…}}` placeholders in `deck.html` the same way.
+`main.rs::ui()` inlines CSS and JS into `ui.html` by replacing its `/*…*/` placeholders. The chosen custom theme goes into `<style id="themeCss">` at runtime, so switching themes doesn't reload the page. `slides.rs::save()` fills the `{{…}}` placeholders in `deck.html` the same way, including `{{THEME}}` and `{{LANG}}`.
 
-## Persisted formats (other code and existing user data depend on them)
+## Themes
+
+- A theme sets CSS custom properties only, in `:root` and `[data-theme="dark"]`.
+- If you add a token, give it a value in `default.css` and use it in `base.css`, `slides.css` or `ui.html`. Existing user themes don't define it, so they keep the default.
+- Don't put literal colours or fonts in `base.css`, `slides.css` or the `ui.html` chrome. A theme couldn't change them.
+- `theme::validate` rejects any answer containing `<`, so a theme can't break out of its `<style>` element. Keep that check.
+
+## Persisted formats (existing user data depends on them)
 
 - **Transcript** `~/Documents/Lecture Transcripts/<date> <title>.md`:
   - The first line is `# title`.
   - Blocks are `**[hh:mm:ss]** text`, separated by blank lines.
   - The last block is the live partial.
+  - Continue appends a `_Continued …_` marker paragraph (older transcripts may have `_Ripresa: …_`), which the parser skips.
   - `slides::parse_transcript` relies on all of this. Change the engine's output format and you break slides for old and new lectures.
-- **Deck** `<lecture> · Slide.json`:
+- **Deck** `<lecture> · Slide.json`. The `· Slide` suffix is kept for existing decks.
   - A list of `batches`, one per click.
   - `rebuild: true` clears the earlier slides. `replace_last: true` pops the previous slide.
+  - `review: true` batches hold the review cards. The latest one replaces earlier ones. They are always shown after the lecture slides, and they keep `to_line` at the previous mark so they don't consume new lines.
+  - `lang` is the slides' ISO language code.
   - Undo pops the last batch. Keep these semantics backward compatible.
-- **Course data** in `~/Library/Application Support/Lecture Scribe/`:
-  - `glossary/<slug>.json` and `material/<course-slug>/<file-slug>.json`, keyed by `glossary::slug()`. Changing `slug()` orphans existing data.
-  - Also `settings.json`.
+- **Data folder** `paths::data_dir()`, which is `~/Library/Application Support/Transcribe Lecture/`.
+  - It falls back to the legacy `…/Lecture Scribe/` when only that one exists. Keep the fallback.
+  - It holds `settings.json` and `themes/<name>.css`.
+  - It also holds `glossary/<slug>.json` and `material/<course-slug>/<file-slug>.json`, keyed by `glossary::slug()`. Changing `slug()` orphans existing data.
 - The engine's `Corrector` reloads the glossary file when its mtime changes, so edits apply during a recording.
 
-## DeepSeek rules
+## Slide engine rules
 
-- The model is `deepseek-flash` with thinking enabled. `reasoning_effort` is `low` per click and `high` for Rebuild. The user chose these, so don't change them unasked.
-- **The API key lives only in the Keychain**: service `Lecture Scribe DeepSeek`, account `deepseek`. The `DEEPSEEK_API_KEY` env var overrides it. Never print it, log it or write it to a file. `slides::call` passes the header to curl through stdin so it's not visible in `ps`. Keep it that way.
-- **Prompt caching depends on request order.** The order is: system prompt (+ material index) → full transcript (append-only) → per-call tail (glossary, previous slides, instruction). Never put per-call data before the transcript. Tool rounds only append messages. Assistant messages with `tool_calls` must be sent back with their `reasoning_content`.
-- **Fidelity is the main product rule.** Slides contain only what the professor said. Course PDFs may only be used to correct spelling, follow naming and cite pages, never to add content. `fact_check` marks unverifiable spans with "(?)". `attach_refs` keeps only pages DeepSeek actually saw. Don't weaken these.
+- **Claude Code** is the only engine. The user picks the model (`slides::MODELS`, default `sonnet`) and reasoning effort (`slides::EFFORTS`, default `low`). Rebuild and Review run at least at `high`. It runs `claude -p` on the user's subscription. Use `slides::claude_command`, which keeps the isolation:
+  - It removes `ANTHROPIC_API_KEY` and related variables from the environment.
+  - It passes `--strict-mcp-config` and `--setting-sources project`.
+  - It runs in an empty temp working directory.
+  - Slides also get `--tools ""` plus the material MCP server. Themes get `WebFetch` only.
+  - Don't add `--bare`: it breaks subscription login.
+- **Prompt caching depends on request order.** The order is:
+  1. System prompt (+ material index). This is fixed per course and language.
+  2. Full transcript (append-only).
+  3. The per-call tail: glossary, previous slides, instruction.
+
+  Never put per-call data before the transcript.
+- **Fidelity is the main product rule.**
+  - Slides contain only what the lecturer said.
+  - Course PDFs may only be used to correct spelling, follow naming and cite pages, never to add content.
+  - `fact_check` marks unverifiable spans with "(?)". `attach_refs` keeps only pages the model actually saw.
+  - Don't weaken these.
+- Model output is normalised before saving: a single block in `left`/`right` becomes a list. `slides.js` also tolerates the old form, for old decks.
 - Parakeet V3 has no vocabulary biasing. The glossary is post-correction of the text, not a model hint.
 
 ## Testing
 
-- Unit tests: `cargo test --release --lib` (same `SDKROOT`).
+- Unit tests: `cargo test --release --lib`.
+- Slide rendering: fill `src/deck.html` with sample slides and screenshot it with headless Chrome (`--headless=new --screenshot`). Check light and dark, the default theme and a custom one, and `{{LANG}}` set to `en` and to another language.
 - UI script syntax: extract the largest `<script>` from `src/ui.html`, drop the `/*SLIDES_JS*/` placeholder, then run `node --check` on it.
-- `--simulate file.wav [--model path.gguf] [--lang it] [--speed N] [--course X]` runs the engine on a WAV and writes to a temp dir.
-- `--slides file.md [--course X] [--rebuild]` makes a **real, paid** DeepSeek call (≈1–2 cents) and writes the deck next to the transcript. Run it only on a **copy** in `/tmp`, never on files in `~/Documents/Lecture Transcripts`.
+- `--simulate file.wav [--model path.gguf] [--lang it] [--speed N] [--course X] [--continue file.md]` runs the engine on a WAV and writes to a temp dir. With `--continue`, run it on a **copy**.
+- `--slides file.md [--course X] [--lang xx] [--rebuild | --review] [--model haiku] [--effort low]` makes a **real** Claude Code call on the user's subscription quota, and it writes the deck next to the transcript. Run it only on a **copy** in `/tmp`, never on files in `~/Documents/Lecture Transcripts`.
+- `--download-model` downloads 740 MB into the data folder. To test it without touching the user's copy, run it with `HOME` set to a throwaway folder.
+- `--make-theme NAME DESCRIPTION` makes a real Claude call and writes into the user's themes folder. Delete test themes afterwards.
 - `--add-pdf file.pdf --course X` writes course material. Use a throwaway course name, and delete its `glossary/` and `material/` entries afterwards.
-- After a prompt change, run `--slides` on a copied lecture and read the result: slide titles, `(?)` count, `usage`, and `lookups`.
+- After a prompt change, run `--slides` on a copied lecture and read the result: slide titles, language, the `(?)` count, `usage` and `lookups`.
 
 ## Done means
 

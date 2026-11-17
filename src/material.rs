@@ -1,9 +1,9 @@
-//! Course material: PDFs the student adds once per course. DeepSeek doesn't get them whole; it
+//! Course material: PDFs the student adds once per course. The model doesn't get them whole; it
 //! sees a short index (file names and the first line of each page) and searches or reads pages
 //! with tools, to check spelling, follow the professor's naming and point to pages.
 //!
 //! Text is extracted locally with macOS PDFKit and stored, page by page, in
-//! ~/Library/Application Support/Lecture Scribe/material/<course>/<file>.json
+//! <data dir>/material/<course>/<file>.json (see `paths::data_dir`).
 
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -14,7 +14,7 @@ pub struct Doc {
 }
 
 fn dir(course: &str) -> PathBuf {
-    dirs::config_dir().unwrap_or_else(std::env::temp_dir).join("Lecture Scribe").join("material").join(crate::glossary::slug(course))
+    crate::paths::data_dir().join("material").join(crate::glossary::slug(course))
 }
 
 /// Text of each page, via PDFKit.
@@ -25,12 +25,12 @@ pub fn pdf_pages(p: &Path) -> Result<Vec<String>, String> {
     #[link(name = "PDFKit", kind = "framework")]
     unsafe extern "C" {}
     objc2::rc::autoreleasepool(|_| unsafe {
-        let cls = AnyClass::get(c"PDFDocument").ok_or("PDFKit non disponibile")?;
+        let cls = AnyClass::get(c"PDFDocument").ok_or("PDFKit is not available")?;
         let url = NSURL::fileURLWithPath(&NSString::from_str(&p.to_string_lossy()));
         let doc: *mut AnyObject = msg_send![cls, alloc];
         let doc: *mut AnyObject = msg_send![doc, initWithURL: &*url];
         if doc.is_null() {
-            return Err("Non riesco ad aprire il PDF.".to_string());
+            return Err("Can't open the PDF.".to_string());
         }
         let n: usize = msg_send![doc, pageCount];
         let mut pages = Vec::with_capacity(n);
@@ -50,7 +50,7 @@ pub fn add(course: &str, pdf: &Path) -> Result<Value, String> {
     let pages: Vec<String> = pdf_pages(pdf)?.into_iter().map(|p| clean(&p)).collect();
     let chars: usize = pages.iter().map(|p| p.chars().count()).sum();
     if chars < 200 {
-        return Err(format!("«{name}» non contiene testo (è una scansione?): serve l'OCR, non ancora supportato."));
+        return Err(format!("«{name}» has no text layer (is it a scan?). OCR isn't supported yet."));
     }
     let d = dir(course);
     std::fs::create_dir_all(&d).map_err(|e| e.to_string())?;
@@ -114,16 +114,16 @@ fn norm(s: &str) -> String {
         .collect()
 }
 
-/// What DeepSeek always sees: each file with its pages' first lines, so it knows where to look.
+/// What the model always sees: each file with its pages' first lines, so it knows where to look.
 /// Stable while the material doesn't change, so it sits in the cached prefix.
 pub fn index(docs: &[Doc]) -> String {
     let total: usize = docs.iter().map(|d| d.pages.len()).sum();
     let per_page = total <= 400;
     let mut out = String::new();
     for d in docs {
-        out.push_str(&format!("«{}» ({} pagine)\n", d.name, d.pages.len()));
+        out.push_str(&format!("«{}» ({} pages)\n", d.name, d.pages.len()));
         if per_page {
-            // Skip running headers and footers ("Unimore, Protocolli … 12"): lines that, without
+            // Skip running headers and footers ("University of X · Networks · 12"): lines that, without
             // their digits, appear on at least half the pages.
             let key = |l: &str| l.chars().filter(|c| !c.is_ascii_digit()).collect::<String>().trim().to_string();
             let mut freq: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -152,7 +152,7 @@ pub fn index(docs: &[Doc]) -> String {
 pub fn search(docs: &[Doc], query: &str, limit: usize) -> String {
     let terms: Vec<String> = norm(query).split(|c: char| !c.is_alphanumeric()).filter(|t| t.chars().count() >= 2).map(String::from).collect();
     if terms.is_empty() {
-        return "Query vuota.".into();
+        return "Empty query.".into();
     }
     let pages: Vec<(usize, usize, String)> =
         docs.iter().enumerate().flat_map(|(di, d)| d.pages.iter().enumerate().map(move |(pi, p)| (di, pi, norm(p)))).collect();
@@ -191,13 +191,13 @@ pub fn search(docs: &[Doc], query: &str, limit: usize) -> String {
         }
     }
     if hits.is_empty() {
-        return format!("Nessun risultato per «{query}».");
+        return format!("No results for «{query}».");
     }
     hits.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.cmp(&a.1)));
     let mut out = String::new();
     for (m, _, di, pi, pos) in hits.iter().take(limit) {
         let d = &docs[*di];
-        out.push_str(&format!("«{}» p.{} ({} di {} parole): …{}…\n\n", d.name, pi + 1, m, alts.len(), snippet(&d.pages[*pi], &pages_norm(&pages, *di, *pi), *pos)));
+        out.push_str(&format!("«{}» p.{} ({} of {} words): …{}…\n\n", d.name, pi + 1, m, alts.len(), snippet(&d.pages[*pi], &pages_norm(&pages, *di, *pi), *pos)));
     }
     out
 }
@@ -217,11 +217,11 @@ fn snippet(orig: &str, normed: &str, pos: usize) -> String {
 pub fn read_page(docs: &[Doc], file: &str, page: usize) -> String {
     let f = norm(file);
     let Some(d) = docs.iter().find(|d| norm(&d.name) == f).or_else(|| docs.iter().find(|d| norm(&d.name).contains(&f))) else {
-        return format!("File «{file}» non trovato.");
+        return format!("File «{file}» not found.");
     };
     match d.pages.get(page.wrapping_sub(1)) {
         Some(p) => format!("«{}» p.{}:\n{}", d.name, page, p.chars().take(6000).collect::<String>()),
-        None => format!("«{}» ha {} pagine.", d.name, d.pages.len()),
+        None => format!("«{}» has {} pages.", d.name, d.pages.len()),
     }
 }
 
@@ -250,21 +250,21 @@ pub fn lev(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
-/// Tool definitions sent to DeepSeek when the course has material.
+/// Tool definitions for the course material, offered to Claude Code through `serve_mcp`.
 pub fn tools() -> Value {
     json!([
         { "type": "function", "function": {
             "name": "search_material",
-            "description": "Cerca parole nel materiale del corso (PDF). Restituisce le pagine migliori con un estratto. Utile per la grafia corretta di termini, comandi e nomi, e per trovare la pagina da citare.",
+            "description": "Searches the course material (PDFs) for words. Returns the best pages with an excerpt. Use it to spell terms, commands and names correctly and to find the page to cite.",
             "parameters": { "type": "object", "properties": {
-                "query": { "type": "string", "description": "Parole da cercare, es. \"dnsmasq dhcp-range\"" }
+                "query": { "type": "string", "description": "Words to search for, e.g. \"dnsmasq dhcp-range\"" }
             }, "required": ["query"] } } },
         { "type": "function", "function": {
             "name": "read_page",
-            "description": "Legge il testo di una pagina del materiale del corso.",
+            "description": "Reads the text of one page of the course material.",
             "parameters": { "type": "object", "properties": {
-                "file": { "type": "string", "description": "Nome del file come nell'indice" },
-                "page": { "type": "integer", "description": "Numero di pagina, da 1" }
+                "file": { "type": "string", "description": "File name as in the index" },
+                "page": { "type": "integer", "description": "Page number, from 1" }
             }, "required": ["file", "page"] } } }
     ])
 }
@@ -275,7 +275,58 @@ pub fn run_tool(docs: &[Doc], name: &str, args: &str) -> String {
     match name {
         "search_material" => search(docs, a["query"].as_str().unwrap_or(""), 6),
         "read_page" => read_page(docs, a["file"].as_str().unwrap_or(""), a["page"].as_u64().unwrap_or(0) as usize),
-        _ => format!("Strumento sconosciuto: {name}"),
+        _ => format!("Unknown tool: {name}"),
+    }
+}
+
+/// Tool calls one slide request may make before the server tells the model to answer.
+const MCP_MAX_CALLS: usize = 10;
+
+/// A minimal MCP server on stdin/stdout (newline-delimited JSON-RPC) that offers the same two
+/// tools to Claude Code: `transcribe-lecture --mcp-material --course X`.
+pub fn serve_mcp(course: &str) {
+    use std::io::{BufRead, Write};
+    let docs = load(course);
+    let tools: Vec<Value> = tools()
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|t| json!({ "name": t["function"]["name"], "description": t["function"]["description"], "inputSchema": t["function"]["parameters"] }))
+        .collect();
+    let mut calls = 0;
+    let stdin = std::io::stdin();
+    let mut out = std::io::stdout();
+    for line in stdin.lock().lines() {
+        let Ok(line) = line else { break };
+        let Ok(msg) = serde_json::from_str::<Value>(&line) else { continue };
+        let Some(id) = msg.get("id").cloned() else { continue }; // notifications need no answer
+        let result = match msg["method"].as_str().unwrap_or("") {
+            "initialize" => json!({
+                "protocolVersion": msg["params"]["protocolVersion"].as_str().unwrap_or("2025-06-18"),
+                "capabilities": { "tools": {} },
+                "serverInfo": { "name": "material", "version": "1" },
+            }),
+            "tools/list" => json!({ "tools": tools }),
+            "tools/call" => {
+                calls += 1;
+                let name = msg["params"]["name"].as_str().unwrap_or("");
+                let text = if calls > MCP_MAX_CALLS {
+                    "Lookup limit reached: answer now with the slide JSON.".to_string()
+                } else {
+                    run_tool(&docs, name, &msg["params"]["arguments"].to_string())
+                };
+                json!({ "content": [{ "type": "text", "text": text }], "isError": false })
+            }
+            "ping" => json!({}),
+            m => {
+                let err = json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": format!("unknown method {m}") } });
+                let _ = writeln!(out, "{err}");
+                let _ = out.flush();
+                continue;
+            }
+        };
+        let _ = writeln!(out, "{}", json!({ "jsonrpc": "2.0", "id": id, "result": result }));
+        let _ = out.flush();
     }
 }
 
@@ -288,7 +339,7 @@ mod tests {
         let docs = vec![Doc { name: "Lab3.pdf".into(), pages: vec!["Introduzione".into(), "Il server DHCP è dnsmasq\nfile /etc/dnsmasq.conf".into()] }];
         let r = search(&docs, "dnsmask", 3);
         assert!(r.contains("p.2"), "{r}");
-        assert!(search(&docs, "configurazione inesistente", 3).starts_with("Nessun"));
+        assert!(search(&docs, "configurazione inesistente", 3).starts_with("No results"));
         assert!(read_page(&docs, "lab3.pdf", 2).contains("dnsmasq.conf"));
         assert_eq!(page_exists(&docs, "Lab3.pdf", 3), None);
         assert_eq!(lev("dnsmask", "dnsmasq"), 1);

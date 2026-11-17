@@ -1,4 +1,4 @@
-/* Slide content on top of Protocolli & Reti (tokens.css + bundle.css). Sizes are the 1280×720 base. */
+/* Slide content on top of the theme (theme/base.css + theme tokens). Sizes are the 1280×720 base. */
 .pr-slide { font-family: var(--font-sans); text-align: left; }
 .pr-slide * { box-sizing: border-box; }
 .s-cover { display: flex; flex-direction: column; justify-content: center; padding-bottom: 56px; }
@@ -47,3 +47,108 @@
 .pr-slide.denser .pr-list li { padding: 6px 0; }
 .pr-slide.denser .body { font-size: 18px; line-height: 25px; }
 .pr-slide.denser .pr-table td { padding: 8px var(--space-4); }
+/* Graphs, plots, bars: SVG with a viewBox, never taller than the slide body. */
+.s-graph, .s-plot, .s-bars, .s-math { margin: 0; }
+.s-graph svg, .s-plot svg, .s-bars svg { display: block; width: 100%; height: auto; max-height: 400px; }
+.pr-body.s-one .s-graph svg, .pr-body.s-one .s-plot svg, .pr-body.s-one .s-bars svg { margin: 0 auto; max-width: 860px; }
+.pr-graph .nd circle, .pr-graph .nd rect { fill: var(--card); stroke: var(--foreground); stroke-width: 1.5; }
+.pr-graph .nd.on circle, .pr-graph .nd.on rect { fill: var(--primary); stroke: var(--primary); }
+.pr-graph .nl { font-family: var(--font-sans); font-size: 17px; font-weight: 600; fill: var(--foreground); }
+.pr-graph .nd.on .nl { fill: var(--primary-foreground); }
+.pr-graph .ns { font-family: var(--font-mono); font-size: 13px; fill: var(--muted-foreground); }
+.pr-graph .ed { stroke: var(--diagram-link); stroke-width: 2; fill: none; }
+.pr-graph .ed.dash { stroke-dasharray: 6 5; }
+.pr-graph .ed.on { stroke: var(--primary); stroke-width: 3.5; }
+.pr-graph .ah { fill: var(--diagram-link); }
+.pr-graph .ah.on { fill: var(--primary); }
+.pr-graph .el, .pr-plot .ml { font-family: var(--font-mono); font-size: 14px; fill: var(--foreground); paint-order: stroke; stroke: var(--background); stroke-width: 6px; stroke-linejoin: round; }
+.pr-plot text, .pr-bars text { font-family: var(--font-mono); }
+.pr-plot .grid { stroke: var(--border); stroke-width: 1; opacity: .55; }
+.pr-plot .ax0 , .pr-bars .ax0 { stroke: var(--muted-foreground); stroke-width: 1.2; }
+.pr-plot .frame { stroke: var(--foreground); stroke-width: 1.5; fill: none; }
+.pr-plot .tk { font-size: 13px; fill: var(--muted-foreground); }
+.pr-plot .al { font-family: var(--font-sans); font-size: 15px; font-weight: 600; fill: var(--foreground); }
+.pr-plot .ser { stroke-width: 3; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.pr-plot .ser.s1 { stroke-dasharray: 10 6; }
+.pr-plot .ser.s2 { stroke-dasharray: 3 5; }
+.pr-plot .ser.s3 { stroke-dasharray: 14 5 3 5; }
+.pr-plot .mark { stroke: var(--warning); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.pr-plot .lg { font-size: 14px; fill: var(--foreground); }
+.pr-bars .bar { fill: var(--chart-3); }
+.pr-bars .bar.on { fill: var(--primary); }
+.pr-bars .bl { font-family: var(--font-sans); font-size: 16px; font-weight: 500; fill: var(--foreground); }
+.pr-bars .bv { font-size: 14px; fill: var(--muted-foreground); }
+/* Math: KaTeX inherits the text colour. */
+.pr-slide .katex { font-size: 1.08em; }
+.s-math { font-size: 26px; overflow-x: auto; overflow-y: hidden; }
+.s-math .katex-display { margin: var(--space-2) 0; text-align: left; }
+.s-math .katex-display > .katex { text-align: left; font-size: 1.1em; }
+.pr-body.s-one .s-math .katex-display, .pr-body.s-one .s-math .katex-display > .katex { text-align: center; }
+.pr-graph { overflow: visible; }
+/* Concept sketch: qualitative, marked "schizzo". */
+.s-sketch { margin: 0; }
+.s-sk { position: relative; }
+.s-sk svg { display: block; width: 100%; height: auto; max-height: 400px; }
+.pr-body.s-one .s-sk svg { margin: 0 auto; max-width: 780px; }
+.s-badge { position: absolute; right: 0; top: 0; font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); border: var(--stroke-hairline) dashed var(--border); padding: 1px 6px; }
+.pr-sketch text { font-family: var(--font-mono); }
+.pr-sketch .sl { font-size: 15px; font-weight: 600; fill: var(--foreground); paint-order: stroke; stroke: var(--background); stroke-width: 5px; stroke-linejoin: round; }
+.pr-sketch .st { font-size: 15px; fill: var(--muted-foreground); }
+.pr-sketch .al { font-family: var(--font-sans); font-size: 15px; font-weight: 600; fill: var(--foreground); }
+.pr-sketch .rg { fill-opacity: .1; stroke-width: 1.5; stroke-dasharray: 6 4; }
+.pr-sketch .cp { opacity: .75; }
+.pr-sketch .cv { fill: none; stroke-width: 3; stroke-linecap: round; }
+.pr-sketch .ar { stroke-width: 2.5; }
+.pr-sketch .ln { stroke: var(--muted-foreground); stroke-width: 1.2; }
+.pr-sketch .sa { stroke: var(--foreground); stroke-width: 1.5; }
+.pr-sketch .pt.hollow { fill: var(--background); stroke-width: 2.5; }
+/* Timeline */
+.s-tl { margin: 0; }
+.s-tl ol { list-style: none; margin: 0; padding: var(--space-4) 0 0; display: grid; gap: 0; }
+.s-tl li { min-width: 0; padding-right: var(--space-6); }
+.s-tl .when { display: block; font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: var(--muted-foreground); min-height: 22px; }
+.s-tl .rail { display: block; position: relative; height: 2px; background: var(--diagram-link); margin: 14px calc(-1 * var(--space-6)) 18px 0; }
+.s-tl li:last-child .rail { margin-right: 0; }
+.s-tl .rail::before { content: ""; position: absolute; left: 0; top: -7px; width: 16px; height: 16px; border-radius: var(--radius-dot); background: var(--background); border: 2px solid var(--diagram-link); box-sizing: border-box; }
+.s-tl li.on .rail::before { background: var(--primary); border-color: var(--primary); }
+.s-tl b { display: block; font-size: 22px; line-height: 29px; font-weight: 600; }
+.s-tl p { margin: 6px 0 0; font-size: 17px; line-height: 25px; color: var(--muted-foreground); }
+.pr-slide.dense .s-tl b { font-size: 19px; line-height: 26px; }
+.pr-slide.dense .s-tl p { font-size: 15px; line-height: 22px; }
+/* Architecture */
+.s-arch { margin: 0; }
+.s-arch svg { display: block; width: 100%; height: auto; max-height: 400px; }
+.pr-body.s-one .s-arch svg { margin: 0 auto; }
+.pr-arch text { font-family: var(--font-mono); }
+.pr-arch .cn { fill: var(--diagram-link); opacity: .14; }
+.pr-arch .ly { fill: var(--card); stroke: var(--foreground); stroke-width: 1.5; }
+.pr-arch .ly.in, .pr-arch .ly.out { fill: var(--muted); }
+.pr-arch .ly.latent, .pr-arch .ly.on { fill: var(--primary); stroke: var(--primary); }
+.pr-arch .sz { font-size: 13px; fill: var(--muted-foreground); }
+.pr-arch .nm { font-family: var(--font-sans); font-size: 15px; font-weight: 600; fill: var(--foreground); }
+.pr-arch .br { fill: none; stroke: var(--muted-foreground); stroke-width: 1.2; }
+.pr-arch .gl { font-size: 14px; letter-spacing: .06em; text-transform: uppercase; fill: var(--muted-foreground); }
+/* Pseudocode and code */
+.s-algo ol { list-style: none; margin: 0; padding: var(--space-4) var(--space-4) var(--space-4) 0; counter-reset: ln; font-size: 16px; line-height: 26px; color: var(--card-foreground); }
+.s-algo li { counter-increment: ln; position: relative; margin-left: 44px; font-family: var(--font-sans); }
+.s-algo li::before { content: counter(ln); position: absolute; left: -36px; width: 24px; text-align: right; font-family: var(--font-mono); font-size: 13px; color: var(--muted-foreground); }
+.s-algo li .kw { font-weight: 700; }
+.s-algo li.hl { background: var(--accent); color: var(--accent-foreground); }
+.s-code .kw { color: var(--info); font-weight: 600; }
+.s-code .st { color: var(--success); }
+.s-code .nu { color: var(--warning); }
+.s-code .cm { color: var(--muted-foreground); font-style: italic; }
+.s-code .fn { font-weight: 600; }
+/* Aside: an anecdote or remark, deliberately quiet. */
+.s-aside { border-left: 3px solid var(--border); padding: 4px 0 4px var(--space-4); }
+.s-aside .tag { font-family: var(--font-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); }
+.s-aside p { margin: 4px 0 0; font-size: 18px; line-height: 27px; color: var(--muted-foreground); font-style: italic; }
+/* Review cards */
+.pr-body.s-cards { grid-template-columns: 1fr; gap: var(--space-4); }
+.s-card { position: relative; border: var(--stroke-hairline) solid var(--border); background: var(--card); padding: var(--space-4) var(--space-6) var(--space-4) 64px; cursor: pointer; }
+.s-card .qn { position: absolute; left: var(--space-6); top: var(--space-4); font-family: var(--font-mono); font-size: 14px; color: var(--muted-foreground); line-height: 30px; }
+.s-card .q { margin: 0; font-size: 21px; line-height: 30px; font-weight: 600; }
+.s-card .a { margin: 6px 0 0; font-size: 17px; line-height: 25px; color: var(--muted-foreground); filter: blur(6px); transition: filter .2s; }
+.s-card.open .a { filter: none; }
+.s-card .at { position: absolute; right: var(--space-4); top: var(--space-4); font-family: var(--font-mono); font-size: 12px; color: var(--muted-foreground); }
+@media print { .s-card .a { filter: none; } }

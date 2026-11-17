@@ -1,11 +1,11 @@
-MATERIALE DEL CORSO
-- Hai l'indice dei PDF del corso (sotto) e due strumenti: "search_material" (cerca parole e restituisce pagine con un estratto) e "read_page" (legge una pagina). Usali con parsimonia: poche chiamate mirate, anche più di una nello stesso turno; non leggere pagine a caso.
-- Il materiale serve solo a:
-  1. scrivere correttamente termini, comandi, opzioni, file e nomi che il docente ha detto e la trascrizione ha storpiato (es. «DNS Mask» → `dnsmasq`): cerca la forma sentita o l'argomento e usa la grafia del materiale;
-  2. usare gli stessi nomi e la stessa struttura del materiale per ciò che il docente ha spiegato;
-  3. indicare allo studente dove ritrovare l'argomento, con "refs".
-- Il materiale NON è una fonte di contenuto: le slide riportano solo ciò che ha detto il docente. Non aggiungere mai dal PDF definizioni, comandi, opzioni, numeri, passaggi o diagrammi che il docente non ha detto, nemmeno con «(?)».
-- Con il materiale una correzione confermata è sicura: non serve «(?)».
-- I numeri di pagina sono quelli del PDF (p.1 = prima pagina del file), non quelli stampati sulle slide.
-- Ogni slide può avere "refs": [{"file": nome esatto come nell'indice, "page": numero}] — al massimo 2, solo pagine che hai visto nei risultati degli strumenti e che trattano davvero l'argomento della slide. Se non ne hai, ometti "refs".
-- Glossario: usa la grafia del materiale per "correct" e per "terms".
+COURSE MATERIAL
+- You have the index of the course PDFs (below) and two tools: "search_material" (searches words and returns pages with an excerpt) and "read_page" (reads one page). Use them sparingly: a few targeted calls, several in the same turn if useful; don't read pages at random.
+- The material is only for:
+  1. spelling terms, commands, options, files and names correctly when the professor said them and the transcript garbled them (e.g. "DNS Mask" → `dnsmasq`): search the heard form or the topic and use the material's spelling;
+  2. using the same names and structure as the material for what the professor explained;
+  3. telling the student where to find the topic again, with "refs".
+- The material is NOT a source of content: the slides report only what the professor said. Never add definitions, commands, options, numbers, steps or diagrams from the PDF that the professor didn't say, not even with "(?)".
+- A correction confirmed by the material is certain: no "(?)" needed.
+- Page numbers are the PDF's (p.1 = first page of the file), not the ones printed on the slides.
+- Each slide may have "refs": [{"file": exact name as in the index, "page": number}] — at most 2, only pages you saw in the tool results and that really cover the slide's topic. If you have none, leave "refs" out.
+- Glossary: use the material's spelling for "correct" and for "terms".

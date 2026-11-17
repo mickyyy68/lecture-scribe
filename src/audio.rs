@@ -161,3 +161,21 @@ impl Resampler {
         out
     }
 }
+
+/// Listens for `secs` seconds and returns the loudest level in dBFS. Opening the microphone is
+/// what makes macOS ask for permission; without it the samples are silent.
+pub fn test_level(device: Option<&str>, secs: f32) -> Result<f32, String> {
+    let (tx, rx) = crossbeam_channel::unbounded();
+    let cap = start_capture(device, tx)?;
+    let end = std::time::Instant::now() + std::time::Duration::from_secs_f32(secs);
+    let mut peak = 0f32;
+    while let Some(left) = end.checked_duration_since(std::time::Instant::now()) {
+        match rx.recv_timeout(left) {
+            Ok(AudioMsg::Samples(s)) => peak = s.iter().fold(peak, |p, x| p.max(x.abs())),
+            Ok(AudioMsg::DeviceError(e)) => return Err(e),
+            Ok(AudioMsg::EndOfInput) | Err(_) => break,
+        }
+    }
+    drop(cap);
+    Ok(if peak > 0.0 { 20.0 * peak.log10() } else { -120.0 })
+}
