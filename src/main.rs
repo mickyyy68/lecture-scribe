@@ -11,13 +11,14 @@ use tao::{
 };
 use wry::WebViewBuilder;
 
-/// The window's page: ui.html with the slide theme and renderer inlined. The chosen custom theme
+/// The window's page: ui.html with its design tokens (app.css), the slide theme and renderer inlined. The chosen custom theme
 /// is applied by the page itself (`init` carries its CSS), so it can change without a reload.
 fn ui() -> String {
     include_str!("ui.html")
         .replace("/*BUNDLE_CSS*/", theme::BASE_CSS)
         .replace("/*TOKENS_CSS*/", theme::DEFAULT_CSS)
         .replace("/*SLIDES_CSS*/", slides::SLIDES_CSS)
+        .replace("/*APP_CSS*/", include_str!("app.css"))
         .replace("/*SLIDES_JS*/", slides::SLIDES_JS)
         .replace("/*DOCS_JS*/", include_str!("docs.js"))
         .replace("/*KATEX_CSS*/", slides::KATEX_CSS)

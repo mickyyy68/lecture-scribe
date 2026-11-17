@@ -35,8 +35,9 @@ People record real lectures with the installed app, and a lost recording can't b
 | `src/sample_lecture.md` | Built-in English transcript excerpt for the Slide style page's samples (`slides::sample`) when there's no lecture yet. |
 | `src/slides.js`, `src/slides.css` | Slide renderer. **Shared** by `ui.html` and the exported deck, so changes must work in both. Fixed labels ("Definition", "sketch", …) come from `LABELS`, keyed by `<html lang>`, with English as the fallback. |
 | `src/deck.html` | Template of the exported `<lecture> · Slide.html` (present/print). |
+| `src/app.css` | The window's design system ("warm paper"): every `--app-*` token of the chrome and the Docs editor (type, surfaces, ink, accent, status, corners, elevation, motion), light in `:root` and dark in `[data-theme="dark"]`. Inlined into `ui.html` as `/*APP_CSS*/`. |
 | `src/theme/base.css` | Slide structure (`.pr-*` classes and the type scale). Uses tokens only, never literal colours or fonts. |
-| `src/theme/default.css` | The default theme: every token, light and dark. System fonts only, so it works offline. |
+| `src/theme/default.css` | The default slide theme: every slide token, light and dark. System fonts only, so it works offline. |
 | `src/claude-symbol.svg` | Claude symbol shown beside the model menu (Wikimedia Commons, CC0; Anthropic trademark, so use it only to mean "made by Claude"). Inlined into `ui.html` as `/*CLAUDE_SVG*/`. |
 | `src/theme.rs`, `src/theme_prompt.txt` | Custom themes: list, load, delete, and `create` (Claude Code writes one from a description). |
 | `src/glossary.rs` | Per-course ASR corrections and terms. |
@@ -48,12 +49,19 @@ People record real lectures with the installed app, and a lost recording can't b
 
 `main.rs::ui()` inlines CSS and JS into `ui.html` by replacing its `/*…*/` placeholders. The chosen custom theme goes into `<style id="themeCss">` at runtime, so switching themes doesn't reload the page. `slides.rs::save()` fills the `{{…}}` placeholders in `deck.html` the same way, including `{{THEME}}` and `{{LANG}}`.
 
-## Themes
+## Design tokens and themes
 
-- A theme sets CSS custom properties only, in `:root` and `[data-theme="dark"]`.
-- The app chrome's corners are tokens too (`--radius-panel`, `--radius-pill`, `--radius-menu`, `--radius-group`, `--radius-control`), so a theme can square them.
-- If you add a token, give it a value in `default.css` and use it in `base.css`, `slides.css` or `ui.html`. Existing user themes don't define it, so they keep the default.
-- Don't put literal colours or fonts in `base.css`, `slides.css` or the `ui.html` chrome. A theme couldn't change them.
+Two separate sets of tokens:
+
+- **The window** (`src/app.css`, `--app-*`): the app's own design system. Everything in `ui.html`'s `<style>` and the Docs editor uses these, never the slide tokens, so a slide theme can't make the window unreadable.
+  - Use the existing tokens. If a component needs a new value, add a token to `app.css` with a light and a dark value; no literal colours, fonts or shadows in `ui.html` or `docs.js`.
+  - Buttons are secondary by default; `.go` is the primary action, `.rec` records, `.ghost` has no box. Floating things (menus, the capsule, dialogs, toasts) use `--app-raised` and `--app-sh2`/`--app-sh3`; segmented controls (`.tabs`, `.switch`) use `--app-seg-on`.
+  - Dark mode: `slides.js` sets `data-theme` on `<html>` from the macOS setting, which switches both sets. Look at screenshots in both (the UI runner follows the system appearance; a test can set `data-theme` itself).
+- **Slides** (`src/theme/default.css`, overridden by the chosen theme): slides in the card, the style page's samples, charts in docs, and exported decks.
+  - A theme sets CSS custom properties only, in `:root` and `[data-theme="dark"]`.
+  - If you add a slide token, give it a value in `default.css` and use it in `base.css` or `slides.css`. Existing user themes don't define it, so they keep the default.
+  - Don't put literal colours or fonts in `base.css` or `slides.css`. A theme couldn't change them.
+  - `base.css` is loaded into the window too: its bare class names (such as `.eyebrow`) reach the chrome, so override what they set where the chrome uses the same name.
 - `theme::validate` rejects any answer containing `<`, so a theme can't break out of its `<style>` element. Keep that check.
 
 ## Persisted formats (existing user data depends on them)

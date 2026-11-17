@@ -1,6 +1,7 @@
-/* Default theme: the full set of tokens. A custom theme (Settings → Theme) is loaded after this
-   file and overrides any of these variables, for light (:root) and dark ([data-theme="dark"]).
-   System fonts only, so slides work offline. */
+/* Default slide theme: the full set of slide tokens. A custom theme (Settings → Slide theme) is
+   loaded after this file and overrides any of these variables, for light (:root) and dark
+   ([data-theme="dark"]). System fonts only, so slides work offline. The app window has its own
+   tokens (src/app.css), so themes never restyle it. */
 
 :root {
   color-scheme: light;
@@ -17,12 +18,6 @@
   --radius: 0px;
   --radius-xl: 4px;
   --radius-dot: 50%;
-  /* The app window's right side: its card, the capsule and pill switches, menus, settings groups, small controls. */
-  --radius-panel: 16px;
-  --radius-pill: 999px;
-  --radius-menu: 12px;
-  --radius-group: 12px;
-  --radius-control: 7px;
   --stroke-hairline: 1px;
   --stroke-strong: 3px;
   --background: oklch(0.985 0.003 95);

@@ -61,3 +61,33 @@ T.test("the slide menu lists the deck and jumps to a slide; Present opens it", a
   await T.click("#presentBtn");
   T.eq(T.sent("open").map((m) => m.path), ["/tmp/deck.html"]);
 });
+
+// The window has its own design tokens (app.css): a slide theme restyles the slides, never the window.
+T.test("a slide theme changes the slides, not the window", async () => {
+  await T.open();
+  const s = (title) => ({ title, from: "00:00:00", left: [{ type: "list", items: ["Take the gradient"] }], notes: "" });
+  T.fire({ type: "slides", path: T.PATH, title: "Test Lecture", lines: 8, done: 8, lang: "en", html: "", flagged: 0, lookups: [], usage: null, slides: [s("Gradient descent")] });
+  await T.until(() => document.querySelector("#slideList .pr-slide"), "a slide is shown");
+  const look = () => [document.body, $("card"), $("capsule"), document.querySelector("header")].map((e) => getComputedStyle(e).backgroundColor + " " + getComputedStyle(e).color);
+  const before = look();
+  T.fire({ type: "theme", name: "Loud", css: ":root, [data-theme=\"dark\"] { --background: #ff0000; --foreground: #00ff00; --card: #0000ff; --muted: #ffff00; --primary: #ff00ff; }", themes: ["Loud"] });
+  await T.wait(50);
+  T.eq(getComputedStyle(document.querySelector("#slideList .pr-slide")).backgroundColor, "rgb(255, 0, 0)", "the slide follows the theme");
+  T.eq(look(), before, "body, card, capsule and header keep the window's colours");
+});
+
+// The Slide style page's options are segmented controls: the chosen one must look chosen.
+T.test("the Slide style options show which one is chosen", async () => {
+  await T.open();
+  await T.click("#moreBtn");
+  await T.click("#setBtn");
+  await T.click("#styleBtn");
+  await T.until(() => document.querySelector(".st-ctl .switch"), "the Slide style page");
+  const sw = document.querySelector(".st-ctl .switch");
+  const bg = (b) => getComputedStyle(b).backgroundColor;
+  const [on, off] = [sw.querySelector("button.on"), sw.querySelector("button:not(.on)")];
+  T.ok(bg(on) !== bg(off), `chosen and other options look the same (${bg(on)})`);
+  await T.click(off);
+  const now = document.querySelector(`.st-ctl .switch[data-k="${sw.dataset.k}"] button.on`);
+  T.eq(now.dataset.v, off.dataset.v, "clicking an option chooses it");
+});
