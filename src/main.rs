@@ -372,6 +372,16 @@ fn main() {
                 "lineEdit" => {
                     let (path, op, text) = (PathBuf::from(s("path")), s("op"), s("text"));
                     let i = msg["i"].as_u64().unwrap_or(u64::MAX) as usize;
+                    // A clean up works from the lines as they were when it started: the edit is
+                    // refused, and the page gets the lines back as they are.
+                    if CLEAN_BUSY.load(std::sync::atomic::Ordering::SeqCst) {
+                        let _ = ipc_proxy.send_event(json!({ "type": "error", "message": "Wait for the clean up to finish to edit the transcript." }).to_string());
+                        if let Ok((_, l)) = versions::view(&path) {
+                            let ev = json!({ "type": "lineEdited", "path": path.to_string_lossy(), "lines": slides::lines_json(&l), "versions": versions::info(&path) });
+                            let _ = ipc_proxy.send_event(ev.to_string());
+                        }
+                        return;
+                    }
                     match versions::route(&path, &op, i) {
                         versions::Target::Version(vi) => {
                             let ev = versions::edit(&path, &op, vi, &text)

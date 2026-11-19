@@ -1111,7 +1111,7 @@ $("course").onchange = () => { persist(); renderedCount = -1; renderSlides(); lo
 function loadGloss() { send("glossary", { course: $("course").value }); send("material", { course: $("course").value }); }
 function renderGloss() {
   const n = gloss.corrections.length;
-  showPanels();
+  showPanels(); Find.refresh(); // the doc it searched may be hidden now
   if (!glossOpen) return;
   const v = $("glossBody"), course = $("course").value.trim() || "this course";
   v.innerHTML = suggestSection() +
@@ -1842,8 +1842,14 @@ window.onEngine = (e) => {
       if (follow) scrollLive();
       break;
     }
-    case "commit": addSeg(e.t, e.text);
-      if (follow && !document.activeElement?.closest?.("#segs")) scrollLive(); break;
+    case "commit": {
+      // A pane rebuilt from the file (a version picked, a clean up done) may hold this line already.
+      const last = segs[segs.length - 1];
+      if (last && last.t === e.t && last.text === e.text) break;
+      addSeg(e.t, e.text);
+      if (follow && !document.activeElement?.closest?.("#segs")) scrollLive();
+      break;
+    }
     case "level": {
       const pct = Math.max(0, Math.min(100, (e.db + 60) / 50 * 100));
       $("meter").firstChild.style.width = pct + "%"; break;

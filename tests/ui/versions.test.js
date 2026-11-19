@@ -46,6 +46,16 @@ T.test("Clean up shows progress, then the clean version; the original is one pic
   await T.until(() => T.texts()[3].endsWith("η."), "and the clean one");
 });
 
+T.test("a line being edited is saved before the clean up starts from the lines", async () => {
+  await T.open();
+  await T.click(T.line(2), { dx: 4, dy: 10 });
+  await T.type("Now ");
+  await T.click("#cleanBtn");
+  const order = T.sent().filter((m) => m.cmd === "lineEdit" || m.cmd === "cleanUp").map((m) => m.cmd);
+  T.eq(order, ["lineEdit", "cleanUp"]);
+  T.ok(!T.line(2).isContentEditable, "the line isn't being edited any more");
+});
+
 T.test("Stop ends the clean up and leaves the transcript as it was", async () => {
   await T.open();
   await T.click("#cleanBtn");

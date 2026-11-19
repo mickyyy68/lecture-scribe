@@ -196,6 +196,9 @@ pub fn rename(t: &Path, id: &str, name: &str) -> Result<(), String> {
 /// Moves a version to the Trash. If it was the active one, the original is shown again.
 pub fn delete(t: &Path, id: &str) -> Result<(), String> {
     let _l = lock();
+    if entry(&meta(t), id).is_none() {
+        return Err("That version isn't there any more.".into());
+    }
     if meta(t)["active"] == id {
         activate(t, None)?;
     }
@@ -210,16 +213,20 @@ pub fn delete(t: &Path, id: &str) -> Result<(), String> {
     save_meta(t, &m)
 }
 
-/// Saves a clean up: the original's lines `from..to` as cleaned (`None`: removed). `from` 0 makes
+/// Saves a clean up: the original's lines `from..to` as cleaned (`None`: removed), refused if
+/// those lines changed since they were read. `from` 0 makes
 /// a new version; otherwise it extends `extend`, which covers exactly `from` lines. The new or
 /// extended version becomes the active one, and the deck follows. Returns its id.
-pub fn save_clean(t: &Path, from: usize, to: usize, cleaned: &[(String, Option<String>)], extend: Option<&str>, model: &str) -> Result<String, String> {
+pub fn save_clean(t: &Path, from: usize, to: usize, was: &[(String, String)], cleaned: &[(String, Option<String>)], extend: Option<&str>, model: &str) -> Result<String, String> {
     let _l = lock();
     let (title, before) = view(t)?;
     let mut m = meta(t);
     let changed = cleaned.iter().filter(|(_, c)| c.is_some()).count();
     let removed = cleaned.iter().filter(|(_, c)| c.is_none()).count();
     let raw = crate::slides::parse_transcript(&std::fs::read_to_string(t).map_err(|e| e.to_string())?).1;
+    if to > raw.len() || raw[from..to] != *was || cleaned.len() != was.len() {
+        return Err("The transcript changed while it was being cleaned up. Try again.".into());
+    }
     let changed = changed - cleaned.iter().zip(raw.iter().skip(from)).filter(|((_, c), (_, o))| c.as_deref() == Some(o.as_str())).count();
     let block = |ts: &str, x: &str| format!("**[{ts}]** {x}\n\n");
     let new_lines: String = cleaned.iter().filter_map(|(ts, c)| c.as_ref().map(|x| block(ts, x))).collect();
@@ -320,6 +327,10 @@ mod tests {
         std::fs::write(&t, format!("# Test\n\n_Thursday_\n\n{body}")).unwrap();
         t
     }
+    /// The original's lines, as a clean up reads them before asking Claude.
+    fn snap(t: &Path) -> Lines {
+        crate::slides::parse_transcript(&std::fs::read_to_string(t).unwrap()).1
+    }
     fn texts(l: &Lines) -> Vec<&str> {
         l.iter().map(|x| x.1.as_str()).collect()
     }
@@ -333,19 +344,19 @@ mod tests {
     fn the_view_is_the_active_version_then_newer_lines() {
         let t = lecture("view", &[("00:00:01", "the radiant"), ("00:00:05", "can you know"), ("00:00:09", "eater is the rate")]);
         let raw = std::fs::read_to_string(&t).unwrap();
-        let id = save_clean(&t, 0, 2, &cleaned(&[("00:00:01", Some("the gradient")), ("00:00:05", None)]), None, "sonnet").unwrap();
+        let id = save_clean(&t, 0, 2, &snap(&t)[0..2], &cleaned(&[("00:00:01", Some("the gradient")), ("00:00:05", None)]), None, "sonnet").unwrap();
         assert_eq!(texts(&view(&t).unwrap().1), ["the gradient", "eater is the rate"]);
         assert_eq!(std::fs::read_to_string(&t).unwrap(), raw);
         assert_eq!(meta(&t)["versions"][0]["changed"], 1);
         assert_eq!(meta(&t)["versions"][0]["removed"], 1);
         // "Clean up the rest" extends it.
-        save_clean(&t, 2, 3, &cleaned(&[("00:00:09", Some("eta is the rate"))]), Some(&id), "sonnet").unwrap();
+        save_clean(&t, 2, 3, &snap(&t)[2..3], &cleaned(&[("00:00:09", Some("eta is the rate"))]), Some(&id), "sonnet").unwrap();
         assert_eq!(texts(&view(&t).unwrap().1), ["the gradient", "eta is the rate"]);
         assert_eq!(info(&t)["lines"], 2);
         set_active(&t, None).unwrap();
         assert_eq!(texts(&view(&t).unwrap().1), ["the radiant", "can you know", "eater is the rate"]);
         // A second clean up is a new version.
-        assert_eq!(save_clean(&t, 0, 3, &cleaned(&[("00:00:01", Some("a")), ("00:00:05", Some("b")), ("00:00:09", Some("c"))]), None, "opus").unwrap(), "clean-2");
+        assert_eq!(save_clean(&t, 0, 3, &snap(&t)[0..3], &cleaned(&[("00:00:01", Some("a")), ("00:00:05", Some("b")), ("00:00:09", Some("c"))]), None, "opus").unwrap(), "clean-2");
     }
 
     /// Hand edits go to the version for its lines and to the original for the lines after it.
@@ -353,7 +364,7 @@ mod tests {
     fn edits_go_where_the_line_lives() {
         let t = lecture("route", &[("00:00:01", "a"), ("00:00:05", "b"), ("00:00:09", "c"), ("00:00:12", "d")]);
         assert_eq!(route(&t, "set", 1), Target::Original(1));
-        save_clean(&t, 0, 3, &cleaned(&[("00:00:01", Some("A")), ("00:00:05", None), ("00:00:09", Some("C"))]), None, "sonnet").unwrap();
+        save_clean(&t, 0, 3, &snap(&t)[0..3], &cleaned(&[("00:00:01", Some("A")), ("00:00:05", None), ("00:00:09", Some("C"))]), None, "sonnet").unwrap();
         // View: A, C, d.
         assert_eq!(route(&t, "set", 1), Target::Version(1));
         assert_eq!(route(&t, "insert", 2), Target::Version(2));
@@ -377,11 +388,23 @@ mod tests {
         let t = lecture("deck", &[("00:00:01", "a"), ("00:00:05", "noise"), ("00:00:09", "c"), ("00:00:12", "d")]);
         let deck = crate::slides::deck_path(&t, ".json");
         std::fs::write(&deck, r#"{"batches":[{"from_line":0,"to_line":3,"slides":[]}]}"#).unwrap();
-        save_clean(&t, 0, 4, &cleaned(&[("00:00:01", Some("A")), ("00:00:05", None), ("00:00:09", Some("C")), ("00:00:12", Some("D"))]), None, "sonnet").unwrap();
+        save_clean(&t, 0, 4, &snap(&t)[0..4], &cleaned(&[("00:00:01", Some("A")), ("00:00:05", None), ("00:00:09", Some("C")), ("00:00:12", Some("D"))]), None, "sonnet").unwrap();
         let to = |p: &Path| serde_json::from_str::<Value>(&std::fs::read_to_string(p).unwrap()).unwrap()["batches"][0]["to_line"].clone();
         assert_eq!(to(&deck), 2); // "d" wasn't in the slides yet: it still isn't
         set_active(&t, None).unwrap();
         assert_eq!(to(&deck), 3);
+    }
+
+    /// A clean up whose lines changed while Claude worked saves nothing.
+    #[test]
+    fn a_clean_up_of_lines_that_changed_is_refused() {
+        let t = lecture("changed", &[("00:00:01", "a"), ("00:00:05", "b"), ("00:00:09", "c")]);
+        let was = snap(&t);
+        crate::slides::edit_line(&t, None, "insert", 1, "mine").unwrap();
+        let r = save_clean(&t, 0, 3, &was, &cleaned(&[("00:00:01", Some("A")), ("00:00:05", Some("B")), ("00:00:09", Some("C"))]), None, "sonnet");
+        assert!(r.unwrap_err().contains("changed"));
+        assert_eq!(texts(&view(&t).unwrap().1), ["a", "mine", "b", "c"]);
+        assert!(info(&t)["versions"].as_array().unwrap().is_empty());
     }
 
     /// An edit to the original moves the deck by the line's place in the view as it is when the
@@ -389,7 +412,7 @@ mod tests {
     #[test]
     fn original_edits_move_the_deck_by_the_view() {
         let t = lecture("shift", &[("00:00:01", "a"), ("00:00:05", "noise"), ("00:00:09", "c"), ("00:00:12", "d"), ("00:00:15", "e")]);
-        save_clean(&t, 0, 3, &cleaned(&[("00:00:01", Some("A")), ("00:00:05", None), ("00:00:09", Some("C"))]), None, "sonnet").unwrap();
+        save_clean(&t, 0, 3, &snap(&t)[0..3], &cleaned(&[("00:00:01", Some("A")), ("00:00:05", None), ("00:00:09", Some("C"))]), None, "sonnet").unwrap();
         // View: A, C, d, e. The slides cover A, C and d.
         let deck = crate::slides::deck_path(&t, ".json");
         std::fs::write(&deck, r#"{"batches":[{"from_line":0,"to_line":3,"slides":[]}]}"#).unwrap();
@@ -405,10 +428,22 @@ mod tests {
         assert_eq!(texts(&view(&t).unwrap().1), ["A", "C", "e"]);
     }
 
+    /// A mark between two lines of the same second (a hand-added line) stays between them.
+    #[test]
+    fn a_mark_between_lines_of_the_same_second_stays() {
+        let t = lecture("same", &[("00:00:01", "a"), ("00:00:01", "mine"), ("00:00:05", "b")]);
+        let deck = crate::slides::deck_path(&t, ".json");
+        std::fs::write(&deck, r#"{"batches":[{"from_line":0,"to_line":1,"slides":[]}]}"#).unwrap();
+        save_clean(&t, 0, 3, &snap(&t)[0..3], &cleaned(&[("00:00:01", Some("A")), ("00:00:01", Some("Mine")), ("00:00:05", Some("B"))]), None, "sonnet").unwrap();
+        set_active(&t, None).unwrap();
+        let to = serde_json::from_str::<Value>(&std::fs::read_to_string(&deck).unwrap()).unwrap()["batches"][0]["to_line"].clone();
+        assert_eq!(to, 1);
+    }
+
     #[test]
     fn compare_pairs_lines_by_time() {
         let t = lecture("compare", &[("00:00:01", "a"), ("00:00:01", "noise"), ("00:00:05", "c"), ("00:00:09", "new")]);
-        save_clean(&t, 0, 3, &cleaned(&[("00:00:01", Some("A")), ("00:00:01", None), ("00:00:05", Some("c"))]), None, "sonnet").unwrap();
+        save_clean(&t, 0, 3, &snap(&t)[0..3], &cleaned(&[("00:00:01", Some("A")), ("00:00:01", None), ("00:00:05", Some("c"))]), None, "sonnet").unwrap();
         let rows = compare(&t).unwrap()["rows"].clone();
         assert_eq!(
             rows,

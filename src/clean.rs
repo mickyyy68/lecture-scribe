@@ -78,6 +78,16 @@ pub fn lines_of(out: &Value, raw: &Lines, a: usize, b: usize) -> Vec<(String, Op
         .collect()
 }
 
+/// The part's lines from an answer (`lines_of`), or an error when it skipped most of them: a
+/// truncated or confused answer would otherwise leave them silently as they were.
+fn answered(out: &Value, raw: &Lines, a: usize, b: usize) -> Result<Vec<(String, Option<String>)>, String> {
+    let n: std::collections::HashSet<_> = out["lines"].as_array().into_iter().flatten().filter_map(|l| l["n"].as_u64().map(|n| n as usize).or_else(|| l["n"].as_str()?.trim_start_matches('#').parse().ok())).filter(|n| (a..b).contains(n)).collect();
+    if n.len() * 2 < b - a {
+        return Err("Claude's answer left out most of a part of the lecture. Try again.".into());
+    }
+    Ok(lines_of(out, raw, a, b))
+}
+
 fn add_usage(sum: &mut Value, u: &Value) {
     for k in ["prompt_tokens", "prompt_cache_hit_tokens", "prompt_cache_miss_tokens", "completion_tokens"] {
         sum[k] = json!(sum[k].as_u64().unwrap_or(0) + u[k].as_u64().unwrap_or(0));
@@ -127,7 +137,7 @@ pub fn clean(t: &Path, course: &str, model: &str, effort: &str, lang: &str, prog
 
     let next = AtomicUsize::new(0);
     let done = AtomicUsize::new(0);
-    let failed = std::sync::atomic::AtomicBool::new(false);
+    let failed: Mutex<Option<String>> = Mutex::new(None); // the first part that failed, not stopped
     let results: Mutex<Vec<Option<Result<(Vec<(String, Option<String>)>, Value, Value), String>>>> = Mutex::new(vec![None; todo.len()]);
     progress(0, todo.len());
     std::thread::scope(|s| {
@@ -136,7 +146,7 @@ pub fn clean(t: &Path, course: &str, model: &str, effort: &str, lang: &str, prog
                 crate::slides::in_job("clean", || {
                     loop {
                         let k = next.fetch_add(1, Ordering::SeqCst);
-                        if k >= todo.len() || crate::slides::cancelled("clean") || failed.load(Ordering::SeqCst) {
+                        if k >= todo.len() || crate::slides::cancelled("clean") {
                             return;
                         }
                         let (a, b) = todo[k];
@@ -146,17 +156,20 @@ pub fn clean(t: &Path, course: &str, model: &str, effort: &str, lang: &str, prog
                         for _ in 0..2 {
                             r = crate::slides::run_claude(&system, &user, course, !docs.is_empty(), model, effort, true)
                                 .and_then(|run| Ok((crate::slides::answer_json(&run.content)?, run.usage)))
-                                .map(|(out, usage)| (lines_of(&out, &raw, a, b), out["glossary"].clone(), usage));
+                                .and_then(|(out, usage)| Ok((answered(&out, &raw, a, b)?, out["glossary"].clone(), usage)));
                             if r.is_ok() || crate::slides::cancelled("clean") {
                                 break;
                             }
                         }
-                        let bad = r.is_err();
-                        results.lock().unwrap()[k] = Some(r);
-                        if bad {
-                            failed.store(true, Ordering::SeqCst); // the others stop too
+                        if let Err(e) = &r {
+                            // Unless it was stopped: the parts still running are stopped too.
+                            if !crate::slides::cancelled("clean") {
+                                failed.lock().unwrap().get_or_insert_with(|| e.clone());
+                                crate::slides::cancel("clean");
+                            }
                             return;
                         }
+                        results.lock().unwrap()[k] = Some(r);
                         progress(done.fetch_add(1, Ordering::SeqCst) + 1, todo.len());
                     }
                 })
@@ -166,9 +179,8 @@ pub fn clean(t: &Path, course: &str, model: &str, effort: &str, lang: &str, prog
 
     let (mut cleaned, mut suggested, mut terms, mut usage) = (Vec::new(), Vec::new(), Vec::new(), json!({}));
     let results = results.into_inner().unwrap();
-    // The first real error, if a part failed; parts never started then count as stopped.
-    if let Some(Err(e)) = results.iter().flatten().find(|r| r.is_err()) {
-        return Err(e.clone());
+    if let Some(e) = failed.into_inner().unwrap() {
+        return Err(e);
     }
     for r in results {
         let (lines, glossary, u) = r.unwrap_or_else(|| Err(crate::slides::STOPPED.into()))?;
@@ -180,7 +192,7 @@ pub fn clean(t: &Path, course: &str, model: &str, effort: &str, lang: &str, prog
     let suggestions = crate::glossary::safe_corrections(course, &json!(suggested), lang);
     // Terms are only context for Claude's next requests: added without asking.
     crate::glossary::merge(course, &json!({ "terms": terms }));
-    crate::versions::save_clean(t, from, to, &cleaned, extend.as_deref(), model)?;
+    crate::versions::save_clean(t, from, to, &raw[from..to], &cleaned, extend.as_deref(), model)?;
     let changed = cleaned.iter().zip(&raw[from..]).filter(|((_, c), (_, o))| c.as_ref().is_some_and(|c| c != o)).count();
     let removed = cleaned.iter().filter(|(_, c)| c.is_none()).count();
     let mut v = crate::slides::transcript_payload(t)?;
@@ -216,6 +228,16 @@ mod tests {
     }
 
     /// Deleted lines, missing ones (kept), "#n" numbers, and a line that grew into new content.
+    /// An answer that skips most of a part is a failure (retried), not a part left as it was.
+    #[test]
+    fn an_answer_missing_most_lines_fails() {
+        let raw: Vec<(String, String)> = (0..10).map(|i| (format!("00:00:{i:02}"), format!("line {i}"))).collect();
+        assert!(answered(&json!({ "lines": [] }), &raw, 0, 10).is_err());
+        assert!(answered(&json!({ "lines": [{ "n": 1, "text": "x" }, { "n": 2, "text": "" }, { "n": 99, "text": "y" }] }), &raw, 0, 10).is_err());
+        let half: Vec<Value> = (0..5).map(|n| json!({ "n": n, "text": "" })).collect();
+        assert_eq!(answered(&json!({ "lines": half }), &raw, 0, 10).unwrap().iter().filter(|(_, t)| t.is_none()).count(), 5);
+    }
+
     #[test]
     fn answers_become_lines_safely() {
         let raw: Vec<(String, String)> = ["the radiant", "can you know", "eater", "short"].iter().enumerate().map(|(i, x)| (format!("00:00:0{i}"), x.to_string())).collect();

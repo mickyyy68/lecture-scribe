@@ -1057,7 +1057,8 @@ pub fn shift_deck(p: &Path, i: usize, shift: i64) -> Result<(), String> {
 
 /// After the lines changed shape some other way (another version, a clean up), each deck mark
 /// moves to the same moment of the lecture: a mark before line `n` of `before` becomes a mark
-/// before the first line of `after` that isn't earlier than it.
+/// before the first line of `after` that isn't earlier than it. Lines of the same second before
+/// the mark stay before it (a hand-added line takes the time of the line above).
 pub fn remap_deck(p: &Path, before: &[(String, String)], after: &[(String, String)]) -> Result<(), String> {
     if !deck_path(p, ".json").exists() {
         return Ok(());
@@ -1065,7 +1066,12 @@ pub fn remap_deck(p: &Path, before: &[(String, String)], after: &[(String, Strin
     let secs = |t: &str| t.split(':').fold(0u64, |a, x| a * 60 + x.parse::<u64>().unwrap_or(0));
     let map = |n: usize| match before.get(n) {
         None => after.len(),
-        Some((t, _)) => after.iter().take_while(|(u, _)| secs(u) < secs(t)).count(),
+        Some((t, _)) => {
+            let s = secs(t);
+            let same = before[..n].iter().rev().take_while(|(u, _)| secs(u) == s).count();
+            let earlier = after.iter().take_while(|(u, _)| secs(u) < s).count();
+            earlier + same.min(after[earlier..].iter().take_while(|(u, _)| secs(u) == s).count())
+        }
     };
     let mut deck = load_deck(p);
     for b in deck["batches"].as_array_mut().into_iter().flatten() {
