@@ -24,19 +24,20 @@ People record real lectures with the installed app, and a lost recording can't b
 
 | File | What |
 |---|---|
-| `src/engine.rs` | Recording worker (hand edits to the lecture being recorded go through it: `Cmd::EditLine`): utterance splitting, Parakeet calls, live partials, Continue (appending to an existing transcript and WAV). Rewrites the transcript `.md` atomically on every change. Applies glossary corrections. |
+| `src/engine.rs` | Recording worker (hand edits to the lecture being recorded go through it: `Cmd::EditLine`; so does Rename, `Cmd::Rename` → `rename_lecture`, refused while recording, which moves all of a lecture's files: `lecture_files`): utterance splitting, Parakeet calls, live partials, Continue (appending to an existing transcript and WAV). Rewrites the transcript `.md` atomically on every change. Applies glossary corrections. |
 | `src/audio.rs` | cpal mic capture and resampling to 16 kHz mono. |
 | `src/models.rs` | Parakeet V3 only: finds it (`<data dir>/models`, Handy's folder, HF cache) and downloads it (curl, resumable, SHA-256 checked). |
 | `src/paths.rs` | Data folder, transcripts folder, settings. |
 | `src/main.rs` | Window, menu bar, IPC commands from `ui.html`, headless CLI modes. |
-| `src/ui.html` | The whole UI: transcript on the left; on the right a card (`#card`) with the Slides and Docs tabs, the capsule at its bottom that holds the tab's actions (it becomes the composer for a suggestion, and the progress with Stop while Claude works; see "the right side" in the script), the ⋯ menu, and the Glossary/PDF and Settings sheets over the card; and the first-run setup (`#setup`, shown until `settings.onboarded`). Plain HTML/JS, no build step. Write menus as plain `<select>`: `Picker` turns every select into the themed picker and keeps the `<select>` as the source of truth (`.value`, options, `onchange`). |
+| `src/ui.html` | The whole UI: a one-row header (the lecture's name is the lecture picker `#lecMenu`, with search, and a field naming a new lecture when none is open; title, course, Start/Continue and the recording settings `#recMenu`); transcript on the left; on the right a card (`#card`) with the Slides and Docs tabs, the capsule at its bottom that holds the tab's actions (it becomes the composer for a suggestion, and the progress with Stop while Claude works; see "the right side" in the script), the ⋯ menu, and the Glossary/PDF and Settings sheets over the card; and the first-run setup (`#setup`, shown until `settings.onboarded`). Plain HTML/JS, no build step. Write menus as plain `<select>`: `Picker` turns every select into the themed picker and keeps the `<select>` as the source of truth (`.value`, options, `onchange`). |
 | `src/slides.rs` | `run_claude` and the shared `claude_command`, deck storage, fact check and HTML export. |
 | `src/slides_prompt.txt`, `src/slides_prompt_material.txt` | The system prompt, in English. `{course}` and `{language}` are filled in per request. The second file is appended only when the course has PDFs. `slides::style_rules` appends the student's slide style (`settings.style`) as a STYLE section; each control's default adds nothing, so keep the defaults in `style_rules` and `STYLE` in `ui.html` in sync. |
 | `src/sample_lecture.md` | Built-in English transcript excerpt for the Slide style page's samples (`slides::sample`) when there's no lecture yet. |
 | `src/slides.js`, `src/slides.css` | Slide renderer. **Shared** by `ui.html` and the exported deck, so changes must work in both. Fixed labels ("Definition", "sketch", …) come from `LABELS`, keyed by `<html lang>`, with English as the fallback. |
 | `src/deck.html` | Template of the exported `<lecture> · Slide.html` (present/print). |
+| `src/app.css` | The window's design system ("warm paper"): every `--app-*` token of the chrome and the Docs editor (type, surfaces, ink, accent, status, corners, elevation, motion), light in `:root` and dark in `[data-theme="dark"]`. Inlined into `ui.html` as `/*APP_CSS*/`. |
 | `src/theme/base.css` | Slide structure (`.pr-*` classes and the type scale). Uses tokens only, never literal colours or fonts. |
-| `src/theme/default.css` | The default theme: every token, light and dark. System fonts only, so it works offline. |
+| `src/theme/default.css` | The default slide theme: every slide token, light and dark. System fonts only, so it works offline. |
 | `src/claude-symbol.svg` | Claude symbol shown beside the model menu (Wikimedia Commons, CC0; Anthropic trademark, so use it only to mean "made by Claude"). Inlined into `ui.html` as `/*CLAUDE_SVG*/`. |
 | `src/theme.rs`, `src/theme_prompt.txt` | Custom themes: list, load, delete, and `create` (Claude Code writes one from a description). |
 | `src/glossary.rs` | Per-course ASR corrections and terms. |
@@ -48,12 +49,19 @@ People record real lectures with the installed app, and a lost recording can't b
 
 `main.rs::ui()` inlines CSS and JS into `ui.html` by replacing its `/*…*/` placeholders. The chosen custom theme goes into `<style id="themeCss">` at runtime, so switching themes doesn't reload the page. `slides.rs::save()` fills the `{{…}}` placeholders in `deck.html` the same way, including `{{THEME}}` and `{{LANG}}`.
 
-## Themes
+## Design tokens and themes
 
-- A theme sets CSS custom properties only, in `:root` and `[data-theme="dark"]`.
-- The app chrome's corners are tokens too (`--radius-panel`, `--radius-pill`, `--radius-menu`, `--radius-group`, `--radius-control`), so a theme can square them.
-- If you add a token, give it a value in `default.css` and use it in `base.css`, `slides.css` or `ui.html`. Existing user themes don't define it, so they keep the default.
-- Don't put literal colours or fonts in `base.css`, `slides.css` or the `ui.html` chrome. A theme couldn't change them.
+Two separate sets of tokens:
+
+- **The window** (`src/app.css`, `--app-*`): the app's own design system. Everything in `ui.html`'s `<style>` and the Docs editor uses these, never the slide tokens, so a slide theme can't make the window unreadable.
+  - Use the existing tokens. If a component needs a new value, add a token to `app.css` with a light and a dark value; no literal colours, fonts or shadows in `ui.html` or `docs.js`.
+  - Buttons are secondary by default; `.go` is the primary action, `.rec` records, `.ghost` has no box. Floating things (menus, the capsule, dialogs, toasts) use `--app-raised` and `--app-sh2`/`--app-sh3`; segmented controls (`.tabs`, `.switch`) use `--app-seg-on`.
+  - Dark mode: `slides.js` sets `data-theme` on `<html>` from the macOS setting, which switches both sets. Look at screenshots in both (the UI runner follows the system appearance; a test can set `data-theme` itself).
+- **Slides** (`src/theme/default.css`, overridden by the chosen theme): slides in the card, the style page's samples, charts in docs, and exported decks.
+  - A theme sets CSS custom properties only, in `:root` and `[data-theme="dark"]`.
+  - If you add a slide token, give it a value in `default.css` and use it in `base.css` or `slides.css`. Existing user themes don't define it, so they keep the default.
+  - Don't put literal colours or fonts in `base.css` or `slides.css`. A theme couldn't change them.
+  - `base.css` is loaded into the window too: its bare class names (such as `.eyebrow`) reach the chrome, so override what they set where the chrome uses the same name.
 - `theme::validate` rejects any answer containing `<`, so a theme can't break out of its `<style>` element. Keep that check.
 
 ## Persisted formats (existing user data depends on them)
@@ -71,6 +79,7 @@ People record real lectures with the installed app, and a lost recording can't b
   - `lang` is the slides' ISO language code.
   - Undo pops the last batch. Keep these semantics backward compatible.
   - Batches point at transcript lines by index (`from_line`, `to_line`). Hand edits (`slides::edit_body`) that add or remove a line call `slides::shift_deck` to move those indices.
+- A lecture's files share its stem: `<stem>.md`, `.wav`, ` · Slide.json`, ` · Slide.html`, ` · Docs/` (`engine::lecture_files`). Add a new per-lecture file there too, or Rename leaves it behind. Titles in file names go through `engine::file_title` (no `·`, which marks a lecture's own files).
 - **Docs** `<lecture> · Docs/<name>.md` plus `images/`. Plain Markdown that other editors open: GitHub tables, `$…$`/`$$…$$`, ```` ```chart ```` blocks holding one slide diagram block as JSON, time links `[mm:ss](#t=hh:mm:ss)`. A doc loaded and saved without edits must come back byte for byte (the "every block type" UI test).
 - **Data folder** `paths::data_dir()`, which is `~/Library/Application Support/Transcribe Lecture/`.
   - It falls back to the legacy `…/Lecture Scribe/` when only that one exists. Keep the fallback.

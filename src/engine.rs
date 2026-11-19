@@ -53,6 +53,8 @@ pub enum Cmd {
     /// A hand edit to a transcript line (see `slides::edit_body`). Goes through the engine so
     /// the lecture being recorded, which lives in memory, gets it too.
     EditLine { path: PathBuf, op: String, i: usize, text: String },
+    /// Renames a lecture (see `rename_lecture`); refused while recording. `done` gets the new path.
+    Rename { path: PathBuf, title: String, done: Box<dyn FnOnce(Result<PathBuf, String>) + Send> },
     Shutdown,
 }
 
@@ -195,6 +197,9 @@ impl Worker {
                     (self.emit)(Event::Error { message: e });
                 }
             }
+            Cmd::Rename { path, title, done } => {
+                done(if self.rec.is_some() { Err("Stop the recording before renaming the lecture.".into()) } else { rename_lecture(&path, &title) });
+            }
             Cmd::Shutdown => unreachable!(),
         }
     }
@@ -223,10 +228,7 @@ impl Worker {
         std::fs::create_dir_all(&o.out_dir).map_err(|e| e.to_string())?;
         let now = chrono::Local::now();
         let title = if o.title.trim().is_empty() { "Lecture".to_string() } else { o.title.trim().to_string() };
-        let safe: String = title
-            .chars()
-            .map(|c| if "/\\:*?\"<>|".contains(c) { '-' } else { c })
-            .collect();
+        let safe = file_title(&title);
         let (transcript_path, body, wav, offset) = match &o.continue_path {
             Some(p) => continue_files(p, o.save_audio, &now, &o.model_label)?,
             None => {
@@ -609,6 +611,66 @@ fn continue_files(
     Ok((p.to_path_buf(), body, wav, Some(offset)))
 }
 
+/// A title as it goes in a file name: no characters Finder or the shell trip on, no newlines,
+/// and no " · " (which marks a lecture's own files, e.g. "<lecture> · Slide.html").
+fn file_title(title: &str) -> String {
+    let s: String = title.chars().map(|c| if "/\\:*?\"<>|·".contains(c) { '-' } else if c.is_control() { ' ' } else { c }).collect();
+    s.split_whitespace().collect::<Vec<_>>().join(" ").trim_start_matches('.').to_string()
+}
+
+/// The files that belong to a lecture: the transcript, its audio, the deck and the Docs folder.
+fn lecture_files(t: &Path) -> [PathBuf; 5] {
+    [t.to_path_buf(), t.with_extension("wav"), crate::slides::deck_path(t, ".json"), crate::slides::deck_path(t, ".html"), crate::docs::dir(t)]
+}
+
+/// Renames a lecture: the title in the transcript, and its files ("2026-11-17 09.28 <title>…"),
+/// keeping the date and time they start with. Returns the transcript's new path.
+pub fn rename_lecture(t: &Path, title: &str) -> Result<PathBuf, String> {
+    let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    if title.is_empty() {
+        return Err("A lecture needs a name.".into());
+    }
+    let body = std::fs::read_to_string(t).map_err(|e| format!("Can't read the transcript: {e}"))?;
+    let dir = t.parent().ok_or("The transcript has no folder")?;
+    let stem = t.file_stem().unwrap_or_default().to_string_lossy().to_string();
+    // "2026-11-17 09.28 " stays: the date the lecture was recorded.
+    let dated = stem.len() > 17 && stem.as_bytes()[..17].iter().enumerate().all(|(i, &b)| match i {
+        4 | 7 => b == b'-',
+        10 | 16 => b == b' ',
+        13 => b == b'.',
+        _ => b.is_ascii_digit(),
+    });
+    let base = format!("{}{}", if dated { &stem[..17] } else { "" }, file_title(&title));
+    let base = if base.trim().is_empty() { "Lecture".to_string() } else { base };
+    let from = lecture_files(t);
+    // The first free name, for all of the lecture's files at once (its own name is free).
+    let to_path = (1..)
+        .map(|n| dir.join(if n == 1 { format!("{base}.md") } else { format!("{base} ({n}).md") }))
+        .find(|p| *p == t || lecture_files(p).iter().all(|f| !f.exists()))
+        .unwrap();
+    if to_path != t {
+        let to = lecture_files(&to_path);
+        let mut moved: Vec<(&PathBuf, &PathBuf)> = Vec::new();
+        for (a, b) in from.iter().zip(to.iter()).filter(|(a, _)| a.exists()) {
+            if let Err(e) = std::fs::rename(a, b) {
+                for (a, b) in moved.into_iter().rev() {
+                    let _ = std::fs::rename(b, a);
+                }
+                return Err(format!("Couldn't rename {}: {e}", a.file_name().unwrap_or_default().to_string_lossy()));
+            }
+            moved.push((a, b));
+        }
+    }
+    let body = match body.split_once('\n') {
+        Some((first, rest)) if first.starts_with("# ") => format!("# {title}\n{rest}"),
+        None if body.starts_with("# ") => format!("# {title}\n"),
+        _ => format!("# {title}\n\n{body}"),
+    };
+    write_atomic(&to_path, &body).map_err(|e| format!("Couldn't save the new name: {e}"))?;
+    let _ = crate::slides::export(&to_path); // the deck's title and footer show the name
+    Ok(to_path)
+}
+
 fn secs(t: &str) -> u64 {
     t.split(':').fold(0, |a, x| a * 60 + x.trim().parse::<u64>().unwrap_or(0))
 }
@@ -648,4 +710,38 @@ fn spawn_wav_feeder(path: PathBuf, speed: f32, tx: Sender<AudioMsg>) -> Result<(
         let _ = tx.send(AudioMsg::EndOfInput);
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Renaming moves all of the lecture's files, keeps the date, and never takes another lecture's name.
+    #[test]
+    fn rename_moves_the_lectures_files() {
+        let d = std::env::temp_dir().join(format!("tl-rename-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("2026-11-17 09.28 Lecture · Docs")).unwrap();
+        let t = d.join("2026-11-17 09.28 Lecture.md");
+        std::fs::write(&t, "# Lecture\n\n_Monday_\n\n**[00:00:01]** Hello.\n\n").unwrap();
+        std::fs::write(d.join("2026-11-17 09.28 Lecture.wav"), "RIFF").unwrap();
+        std::fs::write(d.join("2026-11-17 09.28 Lecture · Docs/Notes.md"), "notes").unwrap();
+        std::fs::write(d.join("2026-11-17 09.28 Networks: DHCP.md"), "# taken").unwrap(); // not this lecture's
+        let n = rename_lecture(&t, "  Networks:  DHCP ").unwrap();
+        assert_eq!(n, d.join("2026-11-17 09.28 Networks- DHCP.md"));
+        assert_eq!(std::fs::read_to_string(&n).unwrap(), "# Networks: DHCP\n\n_Monday_\n\n**[00:00:01]** Hello.\n\n");
+        assert!(d.join("2026-11-17 09.28 Networks- DHCP.wav").exists() && !d.join("2026-11-17 09.28 Lecture.wav").exists());
+        assert!(d.join("2026-11-17 09.28 Networks- DHCP · Docs/Notes.md").exists());
+        assert!(!t.exists());
+        // Taken by another lecture's audio: the next free name.
+        std::fs::write(d.join("2026-11-17 09.28 Week 2.wav"), "RIFF").unwrap();
+        let m = rename_lecture(&n, "Week 2").unwrap();
+        assert_eq!(m, d.join("2026-11-17 09.28 Week 2 (2).md"));
+        assert_eq!(std::fs::read_to_string(d.join("2026-11-17 09.28 Week 2.wav")).unwrap(), "RIFF");
+        // Its own name is free: only the title changes. A "·" becomes "-", so the picker still lists it.
+        assert_eq!(rename_lecture(&m, "Week 2").unwrap(), m);
+        assert_eq!(rename_lecture(&m, "A · B").unwrap(), d.join("2026-11-17 09.28 A - B.md"));
+        assert!(rename_lecture(&d.join("2026-11-17 09.28 A - B.md"), "  ").is_err());
+        let _ = std::fs::remove_dir_all(&d);
+    }
 }

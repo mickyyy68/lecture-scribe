@@ -7,154 +7,204 @@
 <style id="themeCss"></style>
 <style>/*KATEX_CSS*/</style>
 <style>/*SLIDES_CSS*/</style>
+<style>/*APP_CSS*/</style>
 <style>
-  /* App chrome, built on the theme tokens, so a custom theme restyles the window too. */
+  /* App chrome, built on the design tokens in app.css ("warm paper"). The slide theme's tokens
+     style only the slides (previews, the style page's samples, charts in docs). */
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--background); color: var(--foreground);
-    font: 14px/1.4 var(--font-sans); -webkit-user-select: none; -webkit-font-smoothing: antialiased; }
+  html, body { margin: 0; height: 100%; background: var(--app-bg); color: var(--app-fg);
+    font: var(--app-text)/1.4 var(--app-font); -webkit-user-select: none; -webkit-font-smoothing: antialiased; }
   body { display: flex; flex-direction: column; }
-  header { padding: 14px 20px 10px; border-bottom: var(--stroke-hairline) solid var(--border); background: var(--card); }
+  ::selection { background: var(--app-accent-soft); }
+  header { padding: 12px 20px 10px; border-bottom: 1px solid var(--app-line); background: var(--app-bg); }
   .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  #title { flex: 0 1 auto; min-width: 120px; max-width: 55%; font: 600 20px var(--font-sans); letter-spacing: -0.01em; border: none; background: transparent;
-    color: var(--foreground); outline: none; padding: 4px 0; }
-  #title::placeholder { color: var(--muted-foreground); }
-  button { font: 600 13px/18px var(--font-sans); border: var(--stroke-hairline) solid var(--border); background: transparent; color: var(--foreground);
-    padding: 7px 14px; border-radius: 0; cursor: pointer; }
-  button:hover:not(:disabled) { background: var(--muted); }
+  /* The lecture's name is the lecture picker: with a lecture open it's read-only and a click opens
+     #lecMenu; with none (a new lecture) it's the field that names the next recording. */
+  #lecName { display: flex; align-items: center; flex: 0 1 auto; min-width: 0; max-width: 55%; margin-left: -8px; padding: 0 0 0 8px; border-radius: var(--app-r-md); }
+  #lecName.pick, #lecName.pick #title { cursor: pointer; }
+  #lecName.pick:hover, #lecName.open { background: var(--app-hover); }
+  #lecName.renaming { background: var(--app-surface); box-shadow: 0 0 0 2px var(--app-accent-soft), inset 0 0 0 1px var(--app-accent); }
+  #lecName #lecBtn { border: none; background: transparent; padding: 6px 8px 6px 2px; }
+  #lecName.pick #lecBtn, #lecName.open #lecBtn { color: var(--app-fg); }
+  #title { flex: 0 1 auto; min-width: 120px; max-width: 100%; text-overflow: ellipsis; font: 700 var(--app-title) var(--app-font); letter-spacing: -0.01em; border: none; background: transparent;
+    color: var(--app-fg); outline: none; padding: 4px 0; }
+  #title::placeholder { color: var(--app-fg3); }
+  /* Buttons: secondary by default (paper with a hairline); .go is the one primary, .rec records,
+     .ghost has no box. Rows, tabs and capsule buttons restyle themselves below. */
+  button { font: 500 var(--app-text)/18px var(--app-font); border: 1px solid var(--app-line-strong); background: var(--app-surface); color: var(--app-fg);
+    padding: 4px 12px; border-radius: var(--app-r-sm); cursor: pointer; transition: background var(--app-fast) var(--app-ease), filter var(--app-fast) var(--app-ease); }
+  button:hover:not(:disabled) { background: var(--app-hover); }
+  button:active:not(:disabled) { background: var(--app-press); }
+  button:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 1px; }
   button:disabled { opacity: .45; cursor: default; }
-  button.rec { background: var(--destructive); color: var(--destructive-foreground); border-color: var(--destructive); padding: 8px 18px; }
-  button.rec:hover:not(:disabled) { background: var(--destructive); filter: brightness(1.06); }
-  button.go { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
-  button.go:hover:not(:disabled) { background: var(--primary); filter: brightness(1.05); }
-  kbd { font: 500 11px var(--font-mono); opacity: .65; margin-left: 6px; }
-  .dot { width: 9px; height: 9px; border-radius: var(--radius-dot); background: currentColor; display: inline-block; margin-right: 7px; vertical-align: 1px; }
-  #timer { font: 600 18px var(--font-mono); min-width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
-  #meter { width: 90px; height: 6px; background: var(--muted); overflow: hidden; }
-  #meter > div { height: 100%; width: 0; background: var(--success); transition: width .08s linear; }
-  .settings { margin-top: 10px; gap: 14px; color: var(--muted-foreground); font-size: 12.5px; }
-  .settings label { display: flex; align-items: center; gap: 6px; }
-  input.field-in { font: 500 12.5px var(--font-sans); color: var(--foreground); background: var(--card); border: var(--stroke-hairline) solid var(--border);
-    border-radius: 0; padding: 4px 6px; max-width: 290px; outline: none; }
-  input.field-in:focus { border-color: var(--diagram-link); }
+  button.ghost { border-color: transparent; background: transparent; color: var(--app-fg2); }
+  button.ghost:hover:not(:disabled) { background: var(--app-hover); color: var(--app-fg); }
+  button.rec { background: var(--app-rec); color: var(--app-rec-fg); border-color: var(--app-rec); font-weight: 600; padding: 4px 14px; }
+  button.rec:hover:not(:disabled), button.rec:active:not(:disabled) { background: var(--app-rec); filter: brightness(1.07); }
+  button.go { background: var(--app-accent); color: var(--app-accent-fg); border-color: var(--app-accent); font-weight: 600; }
+  button.go:hover:not(:disabled), button.go:active:not(:disabled) { background: var(--app-accent); filter: brightness(1.07); }
+  kbd { font: 500 var(--app-text-xs) var(--app-mono); opacity: .65; margin-left: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; margin-right: 7px; vertical-align: 1px; }
+  #timer { font: 600 17px var(--app-mono); min-width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
+  #meter { width: 90px; height: 5px; border-radius: var(--app-r-pill); background: var(--app-sunken); box-shadow: inset 0 0 0 1px var(--app-line); overflow: hidden; }
+  #meter > div { height: 100%; width: 0; background: var(--app-ok); transition: width .08s linear; }
+  /* Header menus open below their button: the lecture picker (#lecName → #lecMenu) and the
+     recording settings after Start/Continue (#recSetBtn → #recMenu, icon + chevron). */
+  .hd-menu { display: inline-flex; align-items: center; gap: 2px; padding: 4px 6px 4px 8px; color: var(--app-fg2); flex: none; }
+  .hd-menu:hover:not(:disabled), .hd-menu.open { color: var(--app-fg); background: var(--app-hover); }
+  .hd-menu .ic { width: 16px; height: 16px; }
+  .hd-menu .ic.chev { width: 13px; height: 13px; }
+  #lecMenu { position: fixed; width: 420px; max-height: min(540px, calc(100vh - 90px)); overflow: hidden; padding: 0 6px 6px; }
+  #lecMenu .lm-search { display: flex; align-items: center; gap: 8px; margin: 0 -6px 6px; padding: 9px 15px; border-bottom: 1px solid var(--app-line); color: var(--app-fg3); }
+  #lecFilter { flex: 1; min-width: 0; border: none; outline: none; background: transparent; padding: 0; color: var(--app-fg); font: 500 var(--app-text)/20px var(--app-font); -webkit-user-select: text; }
+  #lecFilter::placeholder { color: var(--app-fg3); }
+  #lecList { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+  #lecList .k { font-variant-numeric: tabular-nums; }
+  #lecList .ok { display: flex; align-items: center; }
+  #lecList mark { background: var(--app-accent-soft); color: inherit; border-radius: 2px; }
+  #lecMenu .lm-info { display: flex; align-items: center; gap: 6px; padding: 4px 9px 2px; font-size: var(--app-text-sm); color: var(--app-fg2); white-space: nowrap; overflow: hidden; }
+  #lecMenu .lm-info #lecFile { overflow: hidden; text-overflow: ellipsis; color: var(--app-fg); font-weight: 500; }
+  #lecMenu .lm-info #words::before, #lecMenu .lm-info #saved:not(:empty)::before { content: "·"; margin-right: 6px; }
+  #lecMenu .lm-info #saved .dot { color: var(--app-ok); width: 6px; height: 6px; margin-right: 5px; }
+  #lecReveal { margin-left: auto; padding-left: 12px; color: var(--app-fg2); cursor: pointer; text-decoration: underline; text-decoration-color: var(--app-fg3); text-underline-offset: 2px; }
+  #lecReveal:hover { color: var(--app-fg); }
+  #lecList button:hover:not(.act) { background: transparent; } /* the mouse moves .act, so hover and keys agree */
+  #recMenu { position: fixed; width: 340px; padding: 6px 6px 8px; }
+  #recMenu .rs-row { display: flex; align-items: center; gap: 12px; padding: 5px 9px; font-size: var(--app-text-sm); color: var(--app-fg2); }
+  #recMenu .rs-row > span { flex: none; width: 76px; }
+  #recMenu .rs-row .picker { flex: 1; max-width: none; }
+  #recMenu .rs-row button.picker { width: auto; padding: 3px 8px; border: 1px solid var(--app-line-strong); background: var(--app-surface); font: 500 var(--app-text-sm)/18px var(--app-font); }
+  #recMenu .rs-row button.picker:hover:not(:disabled) { background: var(--app-hover); }
+  #recMenu .rs-row button.picker.open, #recMenu .rs-row button.picker:focus-visible { border-color: var(--app-accent); }
+  #recMenu label.rs-row { gap: 8px; color: var(--app-fg); cursor: default; }
+  input[type=checkbox] { accent-color: var(--app-accent); }
+  /* Fields and pickers share one look: paper, a hairline, a soft accent ring on focus. */
+  .field-in { font: 500 var(--app-text-sm) var(--app-font); color: var(--app-fg); background: var(--app-surface); border: 1px solid var(--app-line-strong);
+    border-radius: var(--app-r-sm); padding: 4px 8px; max-width: 290px; outline: none; }
+  .field-in::placeholder { color: var(--app-fg3); }
+  .field-in:focus { border-color: var(--app-accent); box-shadow: 0 0 0 3px var(--app-accent-soft); }
   /* Picker: the custom select (see Picker in the script). The native <select> stays hidden. */
   .pk-native { display: none !important; }
   .picker { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 290px; text-align: left;
-    font: 500 12.5px/18px var(--font-sans); color: var(--foreground); background: var(--card); border: var(--stroke-hairline) solid var(--border); padding: 4px 8px; }
-  .picker:hover:not(:disabled) { background: var(--card); border-color: var(--muted-foreground); }
-  .picker:focus-visible, .picker.open { outline: none; border-color: var(--diagram-link); }
+    font: 500 var(--app-text-sm)/18px var(--app-font); color: var(--app-fg); background: var(--app-surface); border: 1px solid var(--app-line-strong); padding: 3px 8px; }
+  .picker:hover:not(:disabled) { background: var(--app-hover); }
+  .picker:focus-visible, .picker.open { outline: none; border-color: var(--app-accent); box-shadow: 0 0 0 3px var(--app-accent-soft); }
   .pk-val { display: grid; flex: 1; min-width: 0; }
   .pk-val > span { grid-area: 1 / 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .pk-val > .pk-ghost { visibility: hidden; }
-  .pk-chev { width: 10px; height: 6px; flex: none; color: var(--muted-foreground); }
+  .pk-chev { width: 10px; height: 6px; flex: none; color: var(--app-fg3); }
   .picker.open .pk-chev { transform: rotate(180deg); }
-  .pk-list { position: fixed; z-index: 20; max-width: 460px; overflow-y: auto; padding: 4px 0; background: var(--card); color: var(--card-foreground);
-    border: var(--stroke-hairline) solid var(--border); font: 500 13px/18px var(--font-sans); -webkit-user-select: none; }
-  .pk-opt { position: relative; padding: 6px 14px 6px 30px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
-  .pk-opt.act { background: var(--accent); color: var(--accent-foreground); }
-  .pk-opt.sel::before { content: ""; position: absolute; left: 12px; top: 50%; width: 8px; height: 4px; margin-top: -4px;
-    border: solid currentColor; border-width: 0 0 1.6px 1.6px; transform: rotate(-45deg); }
+  .pk-list { position: fixed; z-index: 20; max-width: 460px; overflow-y: auto; padding: 5px; background: var(--app-raised); color: var(--app-fg);
+    border-radius: var(--app-r-md); box-shadow: var(--app-sh2); font: 500 var(--app-text)/18px var(--app-font); -webkit-user-select: none; }
+  .pk-opt { position: relative; padding: 5px 12px 5px 28px; border-radius: var(--app-r-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+  .pk-opt.act { background: var(--app-hover); }
+  .pk-opt.sel::before { content: ""; position: absolute; left: 11px; top: 50%; width: 8px; height: 4px; margin-top: -4px;
+    border: solid var(--app-accent); border-width: 0 0 1.6px 1.6px; transform: rotate(-45deg); }
   .pk-opt.dis { opacity: .45; }
-  #status { font-size: 12.5px; color: var(--muted-foreground); }
-  #status.rec { color: var(--destructive); font-weight: 600; }
-  #status.paused { color: var(--warning); font-weight: 600; }
+  #status { font-size: var(--app-text-sm); color: var(--app-fg2); white-space: nowrap; }
+  #status.rec { color: var(--app-danger); font-weight: 600; }
+  #status.paused { color: var(--app-warn); font-weight: 600; }
 
   #split { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left, 44%) 6px 1fr; }
   #left { position: relative; min-width: 0; min-height: 0; display: flex; }
   #scroller { flex: 1; overflow-y: auto; -webkit-user-select: text; }
   #doc { max-width: 820px; margin: 0 auto; padding: 24px 24px 120px; font-size: var(--fs, 17px); line-height: 1.65; }
   .seg { display: grid; grid-template-columns: 66px 1fr; gap: 12px; margin: 0 0 .55em; }
-  .ts { font: 12px var(--font-mono); color: var(--muted-foreground); padding-top: .45em; text-align: right; cursor: default; }
+  .ts { font: 12px var(--app-mono); color: var(--app-fg3); padding-top: .45em; text-align: right; cursor: default; }
   .seg .txt { white-space: pre-wrap; }
   /* Click a line to edit it in place (see "editing lines by hand"). */
-  .seg .txt { margin: 0 -6px; padding: 0 6px; border-radius: 3px; }
+  .seg .txt { margin: 0 -6px; padding: 0 6px; border-radius: 4px; }
   .can-edit .seg .txt { cursor: text; }
-  .can-edit .seg:hover .txt:not(:focus) { background: var(--muted); }
-  .seg .txt[contenteditable]:focus { outline: none; background: var(--muted); box-shadow: inset 0 0 0 var(--stroke-hairline) var(--border); }
-  .seg .txt[contenteditable]:empty::before { content: "Type here…"; color: var(--muted-foreground); }
+  .can-edit .seg:hover .txt:not(:focus) { background: var(--app-hover); }
+  .seg .txt[contenteditable]:focus { outline: none; background: var(--app-surface); box-shadow: 0 0 0 1px var(--app-line-strong), var(--app-sh1); }
+  .seg .txt[contenteditable]:empty::before { content: "Type here…"; color: var(--app-fg3); }
   .seg .ts { position: relative; }
   .seg .add { display: none; }
   .can-edit .seg .add { display: block; position: absolute; left: -24px; top: .2em; width: 22px; height: 22px; padding: 0; border: none;
-    font: 500 17px/20px var(--font-sans); color: var(--muted-foreground); background: transparent; opacity: 0; }
+    font: 500 17px/20px var(--app-font); color: var(--app-fg3); background: transparent; border-radius: var(--app-r-sm); opacity: 0; }
   .can-edit .seg:hover .add { opacity: 1; }
-  .can-edit .seg .add:hover { background: var(--muted); color: var(--foreground); }
+  .can-edit .seg .add:hover { background: var(--app-hover); color: var(--app-fg); }
   .seg.fresh .txt { animation: fade .5s ease; }
   .seg.flash .txt { animation: flash 1.6s ease; }
-  @keyframes fade { from { background: var(--success-subtle); } to { background: transparent; } }
-  @keyframes flash { 0%, 60% { background: var(--accent); } to { background: transparent; } }
-  #partial .txt { color: var(--muted-foreground); font-style: italic; }
-  #partial .ts .dot { color: var(--destructive); animation: pulse 1.2s infinite; margin: 0; }
+  @keyframes fade { from { background: var(--app-ok-soft); } to { background: transparent; } }
+  @keyframes flash { 0%, 60% { background: var(--app-accent-soft); } to { background: transparent; } }
+  #partial .txt { color: var(--app-fg2); font-style: italic; }
+  #partial .ts .dot { color: var(--app-danger); animation: pulse 1.2s infinite; margin: 0; }
   @keyframes pulse { 50% { opacity: .25; } }
-  .empty { color: var(--muted-foreground); text-align: center; margin-top: 120px; font-size: 15px; line-height: 1.6; }
-  .empty b { color: var(--foreground); }
+  .empty { color: var(--app-fg2); text-align: center; margin-top: 120px; font-size: var(--app-text-lg); line-height: 1.6; }
+  .empty b { color: var(--app-fg); }
   #jump { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: none;
-    background: var(--foreground); color: var(--background); border: none; padding: 6px 16px; }
-  #divider { cursor: col-resize; background: var(--background); }
-  #divider:hover, #divider.drag { background: var(--accent); }
+    background: var(--app-raised); color: var(--app-fg); border: none; border-radius: var(--app-r-pill); padding: 5px 14px; box-shadow: var(--app-sh2); }
+  #divider { cursor: col-resize; background: transparent; }
+  #divider:hover, #divider.drag { background: linear-gradient(var(--app-line-strong), var(--app-line-strong)) center / 2px 100% no-repeat; }
 
   /* Right side: a card on the window background. The card shows the tab's content; the capsule
      floating at its bottom holds every action for it (see "the capsule" in the script). */
-  #course { flex: 0 1 220px; min-width: 90px; font: 500 15px var(--font-sans); color: var(--muted-foreground); background: transparent;
-    border: var(--stroke-hairline) solid transparent; border-radius: var(--radius-control); padding: 4px 8px; -webkit-user-select: text; }
-  #course:hover { border-color: var(--border); }
-  #course:focus { outline: none; border-color: var(--diagram-link); background: var(--card); color: var(--foreground); }
-  #course::placeholder { color: var(--muted-foreground); opacity: .7; }
-  #right { min-width: 0; min-height: 0; display: flex; padding: 12px 14px 14px 2px; background: var(--background); }
-  #card { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; overflow: hidden; background: var(--card);
-    border-radius: var(--radius-panel); box-shadow: 0 0 0 var(--stroke-hairline) var(--border), 0 2px 12px color-mix(in oklch, var(--foreground) 5%, transparent); }
+  #course { flex: 0 1 220px; min-width: 90px; font: 500 15px var(--app-font); color: var(--app-fg2); background: transparent;
+    border: 1px solid transparent; border-radius: var(--app-r-sm); padding: 4px 8px; -webkit-user-select: text; }
+  #course:hover { background: var(--app-hover); }
+  #course:focus { outline: none; border-color: var(--app-accent); box-shadow: 0 0 0 3px var(--app-accent-soft); background: var(--app-surface); color: var(--app-fg); }
+  #course::placeholder { color: var(--app-fg3); }
+  #right { min-width: 0; min-height: 0; display: flex; padding: 12px 14px 14px 2px; background: var(--app-bg); }
+  #card { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; overflow: hidden; background: var(--app-surface);
+    border-radius: var(--app-r-lg); box-shadow: 0 0 0 1px var(--app-line), var(--app-sh1); }
   .cd-head { display: flex; align-items: center; padding: 10px 14px 4px; flex: none; }
-  .cd-side { flex: 1; min-width: 0; font-size: 12px; color: var(--muted-foreground); }
+  .cd-side { flex: 1; min-width: 0; font-size: 12px; color: var(--app-fg3); }
   .cd-side.r { text-align: right; }
-  .tabs { display: inline-flex; background: var(--muted); border-radius: var(--radius-pill); padding: 3px; flex: none; }
-  .tabs button { position: relative; border: none; border-radius: var(--radius-pill); padding: 5px 18px; font: 600 13px/18px var(--font-sans); color: var(--muted-foreground); }
-  .tabs button:hover:not(:disabled) { background: transparent; color: var(--foreground); }
-  .tabs button.on { background: var(--card); color: var(--foreground); box-shadow: 0 1px 3px color-mix(in oklch, var(--foreground) 18%, transparent); }
-  .tab-dot { display: none; position: absolute; top: 5px; right: 8px; width: 6px; height: 6px; border-radius: var(--radius-dot); background: var(--primary); animation: pulse 1.2s infinite; }
+  .tabs { display: inline-flex; background: var(--app-sunken); border-radius: var(--app-r-md); padding: 3px; flex: none; }
+  .tabs button { position: relative; display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; border-radius: var(--app-r-sm); padding: 3px 14px 3px 11px; font: 500 13px/18px var(--app-font); color: var(--app-fg2); }
+  .tabs button .ic { width: 15px; height: 15px; }
+  .tabs button:hover:not(:disabled) { background: transparent; color: var(--app-fg); }
+  .tabs button.on, .tabs button.on:hover:not(:disabled) { background: var(--app-seg-on); color: var(--app-fg); box-shadow: var(--app-sh-raised); }
+  .tab-dot { display: none; position: absolute; top: 4px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--app-accent); animation: pulse 1.2s infinite; }
   .tabs button.job .tab-dot { display: block; }
   #slideList { flex: 1; overflow-y: auto; padding: 12px 28px 100px; display: grid; gap: 22px; align-content: start; }
-  .cd-empty { max-width: 420px; margin: 0 auto; padding: 18vh 24px 120px; text-align: center; color: var(--muted-foreground); font-size: 14px; line-height: 1.55; }
-  .cd-empty h2 { margin: 12px 0 6px; font: 600 22px/1.3 var(--font-serif); color: var(--foreground); }
-  .cd-empty b { color: var(--foreground); }
-  .cd-empty svg { width: 40px; height: 40px; stroke-width: 1.2; }
+  .cd-empty { max-width: 420px; margin: 0 auto; padding: 18vh 24px 120px; text-align: center; color: var(--app-fg2); font-size: var(--app-text); line-height: 1.55; }
+  .cd-empty h2 { margin: 12px 0 6px; font: 700 20px/1.3 var(--app-font); color: var(--app-fg); }
+  .cd-empty b { color: var(--app-fg); }
+  .cd-empty svg { width: 40px; height: 40px; stroke-width: 1.2; color: var(--app-fg3); }
   #docsView { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  #docSavedTxt { font-size: 12px; color: var(--muted-foreground); }
+  #docSavedTxt { font-size: 12px; color: var(--app-fg3); }
 
   svg.ic { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   svg.ic.sm { width: 13px; height: 13px; margin-left: -2px; opacity: .7; }
-  /* The capsule: inverted colours, so it always reads as "the controls". */
+  /* The capsule: a small floating toolbar of paper, lifted off the card by its shadow. */
   .capsule { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 2px;
-    max-width: calc(100% - 24px); padding: 5px; border-radius: var(--radius-pill); background: var(--foreground); color: var(--background);
-    box-shadow: 0 8px 28px color-mix(in oklch, var(--foreground) 30%, transparent); font-size: 13.5px; white-space: nowrap; }
+    max-width: calc(100% - 24px); padding: 4px; border-radius: var(--app-r-lg); background: var(--app-raised); color: var(--app-fg);
+    box-shadow: var(--app-sh3); font-size: var(--app-text); white-space: nowrap; }
   .cap-grp { display: contents; }
-  .capsule .cs { display: inline-flex; align-items: center; gap: 7px; min-width: 0; border: none; border-radius: var(--radius-pill); padding: 7px 12px;
-    background: transparent; color: inherit; font: 500 13.5px/18px var(--font-sans); }
-  .capsule .cs:hover:not(:disabled), .capsule .cs.open { background: color-mix(in oklch, var(--background) 16%, transparent); }
+  .capsule .cs { display: inline-flex; align-items: center; gap: 7px; min-width: 0; border: none; border-radius: var(--app-r-sm); padding: 6px 11px;
+    background: transparent; color: inherit; font: 500 var(--app-text)/18px var(--app-font); }
+  .capsule .cs:hover:not(:disabled), .capsule .cs.open { background: var(--app-hover); }
   .capsule .cs:disabled { opacity: .4; }
-  .capsule .cs.ic-only { padding: 7px 9px; position: relative; }
+  .capsule .cs.ic-only { padding: 6px 8px; position: relative; color: var(--app-fg2); }
   .capsule .cs > span { overflow: hidden; text-overflow: ellipsis; }
   #docName, #slideCount { max-width: 210px; }
-  .capsule .cs.pri { background: var(--background); color: var(--foreground); font-weight: 600; }
-  .capsule .cs.pri:hover:not(:disabled) { background: var(--background); filter: brightness(.96); }
-  .capsule .cs.pri small { font-weight: 500; opacity: .55; font-size: 12px; margin-left: -2px; }
-  .capsule .cs.pri.hl { box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 55%, transparent); }
-  .capsule .cs.soft { background: color-mix(in oklch, var(--background) 14%, transparent); }
-  .capsule .claude-mark { width: 15px; height: 15px; }
-  .cap-sep { width: var(--stroke-hairline); height: 20px; margin: 0 3px; background: color-mix(in oklch, var(--background) 30%, transparent); }
-  .cap-badge { display: none; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: var(--radius-dot); background: var(--primary); }
+  .capsule .cs.pri { background: var(--app-accent); color: var(--app-accent-fg); font-weight: 600; }
+  .capsule .cs.pri:hover:not(:disabled) { background: var(--app-accent); filter: brightness(1.07); }
+  .capsule .cs.pri small { font-weight: 500; opacity: .8; font-size: 12px; margin-left: -2px; }
+  .capsule .cs.pri.hl { box-shadow: 0 0 0 3px var(--app-accent-soft); }
+  .capsule .cs.pri .claude-mark svg { fill: currentColor; } /* one colour on the accent */
+  .capsule .cs.soft { background: var(--app-sunken); }
+  .capsule .cs.soft:hover:not(:disabled) { background: var(--app-press); }
+  .capsule .claude-mark { width: 14px; height: 14px; }
+  .cap-sep { width: 1px; height: 18px; margin: 0 3px; background: var(--app-line); }
+  .cap-badge { display: none; position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--app-accent); }
   #moreBtn.badge .cap-badge { display: block; }
-  #capProg { display: none; padding: 5px 5px 5px 14px; overflow: hidden; }
+  #capProg { display: none; padding: 4px 4px 4px 12px; overflow: hidden; }
   #capProg .claude-mark { margin-right: 8px; }
   #progTxt { overflow: hidden; text-overflow: ellipsis; }
-  #progTime { margin: 0 10px; opacity: .6; font-variant-numeric: tabular-nums; }
-  .cap-run { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; overflow: hidden; }
-  .cap-run::after { content: ""; position: absolute; top: 0; bottom: 0; width: 30%; background: var(--primary); animation: run 1.3s linear infinite; transform: translateX(-100%); }
+  #progTime { margin: 0 10px; color: var(--app-fg3); font-variant-numeric: tabular-nums; }
+  .cap-run { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; overflow: hidden; }
+  .cap-run::after { content: ""; position: absolute; top: 0; bottom: 0; width: 30%; background: var(--app-accent); animation: run 1.3s linear infinite; transform: translateX(-100%); }
   @keyframes run { to { transform: translateX(340%); } }
-  #composer { display: none; flex-direction: column; align-items: stretch; width: calc(100% - 48px); max-width: 640px; padding: 12px 12px 10px; border-radius: var(--radius-panel); white-space: normal; }
+  #composer { display: none; flex-direction: column; align-items: stretch; width: calc(100% - 48px); max-width: 640px; padding: 12px 10px 8px; white-space: normal; }
   .cm-in { display: flex; align-items: center; gap: 10px; padding: 0 6px 10px; }
-  #hintIn { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: inherit; font: 14.5px/22px var(--font-sans); padding: 0; -webkit-user-select: text; }
-  #hintIn::placeholder { color: inherit; opacity: .5; }
+  #hintIn { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: inherit; font: 14.5px/22px var(--app-font); padding: 0; -webkit-user-select: text; }
+  #hintIn::placeholder { color: var(--app-fg3); }
   .cm-row { display: flex; align-items: center; gap: 8px; }
   .cm-row .chip { padding: 4px 10px; font-size: 12.5px; }
-  #cmpInfo, .cm-esc { font-size: 12px; opacity: .55; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  #cmpInfo, .cm-esc { font-size: 12px; color: var(--app-fg3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   #capsule.off, #capProg.off { display: none; }
   #card.cmp #composer { display: flex; }
   #card.cmp #capsule, #card.busyc #capsule { display: none; }
@@ -163,213 +213,213 @@
 
   /* Menus that open from the capsule (above it). */
   .pop { display: none; position: absolute; z-index: 6; min-width: 240px; max-width: calc(100% - 24px); max-height: 70%; overflow-y: auto; flex-direction: column; padding: 6px;
-    background: var(--card); color: var(--card-foreground); border-radius: var(--radius-menu); font-size: 13.5px;
-    box-shadow: 0 0 0 var(--stroke-hairline) var(--border), 0 14px 36px color-mix(in oklch, var(--foreground) 22%, transparent); }
-  .pop.open { display: flex; }
-  .pop button, .pop .pop-row { display: flex; align-items: center; gap: 9px; width: 100%; border: none; border-radius: var(--radius-control); padding: 7px 10px;
-    text-align: left; font: 500 13.5px/18px var(--font-sans); background: transparent; color: inherit; }
-  .pop button:hover:not(:disabled), .pop button.act { background: var(--accent); color: var(--accent-foreground); }
+    background: var(--app-raised); color: var(--app-fg); border-radius: var(--app-r-md); font-size: var(--app-text); box-shadow: var(--app-sh2); }
+  .pop.open { display: flex; animation: pop-in var(--app-fast) var(--app-ease); }
+  @keyframes pop-in { from { transform: translateY(3px); } } /* a short lift, no fade: a menu is never see-through */
+  .pop button, .pop .pop-row { display: flex; align-items: center; gap: 9px; width: 100%; border: none; border-radius: var(--app-r-sm); padding: 5px 9px;
+    text-align: left; font: 400 var(--app-text)/20px var(--app-font); background: transparent; color: inherit; }
+  .pop button:hover:not(:disabled), .pop button.act { background: var(--app-hover); color: var(--app-fg); }
   .pop button > span.t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pop .k { margin-left: auto; padding-left: 12px; color: var(--muted-foreground); font-size: 12px; font-weight: 500; white-space: nowrap; }
-  .pop .k .dotp { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: var(--radius-dot); background: var(--primary); }
-  .pop .ic { color: var(--muted-foreground); }
+  .pop .k { margin-left: auto; padding-left: 12px; color: var(--app-fg3); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .pop .k .dotp { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--app-accent); }
+  .pop .ic { color: var(--app-fg2); width: 16px; height: 16px; }
   .pop button:hover .ic { color: inherit; }
   .pop .ok { width: 17px; flex: none; }
-  .pop hr { width: 100%; border: 0; border-top: var(--stroke-hairline) solid var(--border); margin: 5px 0; }
-  .pop .lab { font: 600 11px var(--font-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted-foreground); padding: 6px 10px 3px; }
-  .pop .note { font-size: 12px; line-height: 17px; color: var(--muted-foreground); padding: 4px 10px 6px; white-space: normal; }
-  .pop .pop-row button { width: auto; padding: 3px 10px; font-weight: 600; border: var(--stroke-hairline) solid var(--border); }
+  .pop hr { width: 100%; border: 0; border-top: 1px solid var(--app-line); margin: 5px 0; }
+  .pop .lab { font: 500 12px var(--app-font); color: var(--app-fg3); padding: 6px 9px 3px; }
+  .pop .note { font-size: 12px; line-height: 17px; color: var(--app-fg2); padding: 4px 9px 6px; white-space: normal; }
+  .pop .pop-row button { width: auto; padding: 1px 10px; font-weight: 600; border: 1px solid var(--app-line-strong); background: var(--app-raised); }
   .pop-tab { display: contents; }
   #slidesNote span + span::before { content: " · "; }
-  #slidesNote .err { color: var(--destructive); }
+  #slidesNote .err { color: var(--app-danger); }
   #slideMenu { width: 360px; }
   #slideMenu .ok.k { width: 22px; justify-content: flex-end; }
   #docMenu { width: 300px; }
   #modelMenu { width: 250px; }
-  .pop .dz, .pop .dz .ic { color: var(--destructive); }
-  .pop .dz:hover:not(:disabled) { background: color-mix(in oklch, var(--destructive) 12%, transparent); color: var(--destructive); }
+  .pop .dz, .pop .dz .ic { color: var(--app-danger); }
+  .pop .dz:hover:not(:disabled) { background: var(--app-danger-soft); color: var(--app-danger); }
 
   /* Glossary and Settings: sheets over the card. */
-  .sheet { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; background: var(--card); }
+  .sheet { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; background: var(--app-surface); }
   .sh-head { display: flex; align-items: center; gap: 8px; padding: 14px 18px 10px; flex: none; }
-  .sh-head b { font: 600 18px var(--font-sans); letter-spacing: -0.01em; }
-  .sh-head button { border: none; padding: 4px 8px; color: var(--diagram-link); font-weight: 600; font-size: 14px; border-radius: var(--radius-control); }
+  .sh-head b { font: 700 18px var(--app-font); letter-spacing: -0.01em; }
+  .sh-head button { border: none; background: transparent; padding: 3px 8px; color: var(--app-accent-ink); font-weight: 600; font-size: 14px; }
   .sh-head .sh-back { margin-left: -8px; }
   .panel { flex: 1; overflow-y: auto; padding: 8px 18px 60px; }
-  .gl { display: flex; align-items: center; gap: 6px; margin: 14px 14px 6px; font: 600 11.5px var(--font-sans); letter-spacing: .07em; text-transform: uppercase; color: var(--muted-foreground); }
+  .gl { display: flex; align-items: center; gap: 6px; margin: 16px 12px 6px; font: 500 var(--app-text-sm) var(--app-font); color: var(--app-fg2); }
   .gl .claude-mark { width: 13px; height: 13px; }
-  .grp { border-radius: var(--radius-group); background: var(--muted); max-width: 640px; }
+  .grp { border-radius: var(--app-r-md); background: var(--app-group); box-shadow: inset 0 0 0 1px var(--app-line); max-width: 640px; }
   .grp.pad { display: grid; gap: 8px; padding: 12px; margin-bottom: 12px; }
-  .grp.pad .field-in { max-width: none; width: 100%; font-size: 13.5px; padding: 7px 9px; border-radius: var(--radius-control); }
-  .gr { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 7px 14px; border: none; border-top: var(--stroke-hairline) solid var(--border);
-    background: transparent; color: var(--foreground); font: 500 14px/20px var(--font-sans); text-align: left; border-radius: 0; }
+  .grp.pad .field-in { max-width: none; width: 100%; font-size: var(--app-text); padding: 6px 9px; }
+  .gr { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 6px 12px; border: none; border-top: 1px solid var(--app-line);
+    background: transparent; color: var(--app-fg); font: 400 var(--app-text)/20px var(--app-font); text-align: left; border-radius: 0; }
   .grp > .gr:first-child { border-top: none; }
-  button.gr:hover:not(:disabled) { background: color-mix(in oklch, var(--foreground) 5%, transparent); }
-  .gr .gt { color: var(--muted-foreground); font-weight: 500; }
+  button.gr:hover:not(:disabled) { background: var(--app-hover); }
+  .grp > .gr:first-child { border-radius: var(--app-r-md) var(--app-r-md) 0 0; } .grp > .gr:last-child { border-radius: 0 0 var(--app-r-md) var(--app-r-md); } .grp > .gr:only-child { border-radius: var(--app-r-md); }
+  .gr .gt { color: var(--app-fg3); }
   .gr .picker { min-width: 120px; }
-  .gr .lnk { border: none; padding: 2px 6px; font-weight: 500; font-size: 13px; color: var(--muted-foreground); }
-  .gh { margin: 6px 14px 4px; max-width: 610px; font-size: 12.5px; line-height: 18px; color: var(--muted-foreground); }
-  .si .fr { width: 100%; aspect-ratio: 16 / 9; position: relative; overflow: hidden; outline: var(--stroke-hairline) solid var(--border); }
+  .gr .lnk { border: none; background: transparent; padding: 2px 6px; font-size: 13px; color: var(--app-fg2); }
+  .gh { margin: 6px 12px 4px; max-width: 610px; font-size: var(--app-text-sm); line-height: 18px; color: var(--app-fg2); }
+  .si .fr { width: 100%; aspect-ratio: 16 / 9; position: relative; overflow: hidden; border-radius: 4px; box-shadow: 0 0 0 1px var(--app-line), var(--app-sh1); }
   .si .fr > .pr-slide { position: absolute; top: 0; left: 0; transform-origin: 0 0; transform: scale(var(--k, .4)); }
-  .si.fresh .fr { outline: var(--stroke-strong) solid var(--primary); }
-  .si-meta { display: flex; gap: 12px; margin-top: 6px; font: 12px var(--font-mono); color: var(--muted-foreground); }
-  .si-meta a { color: var(--diagram-link); cursor: pointer; text-decoration: none; }
+  .si.fresh .fr { box-shadow: 0 0 0 2px var(--app-accent), 0 0 0 5px var(--app-accent-soft); }
+  .si-meta { display: flex; gap: 12px; margin-top: 6px; font: 12px var(--app-mono); color: var(--app-fg3); }
+  .si-meta a { color: var(--app-accent-ink); cursor: pointer; text-decoration: none; }
   .si-meta a:hover { text-decoration: underline; }
-  .si-notes { margin: 4px 0 0; font-size: 13px; line-height: 19px; color: var(--muted-foreground); -webkit-user-select: text; }
-  .panel h3 { margin: 0 0 6px; font: 600 12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
-  .panel .hint { margin: 0 0 12px; font-size: 13px; line-height: 19px; color: var(--muted-foreground); max-width: 560px; }
+  .si-notes { margin: 4px 0 0; font-size: 13px; line-height: 19px; color: var(--app-fg2); -webkit-user-select: text; }
+  .panel h3 { margin: 0 0 6px; font: 600 var(--app-text-sm) var(--app-font); color: var(--app-fg2); }
+  .panel .hint { margin: 0 0 12px; font-size: 13px; line-height: 19px; color: var(--app-fg2); max-width: 560px; }
   #glossView .hint { margin-bottom: 18px; }
-  .panel .hint.err { color: var(--destructive); }
-  #themeDesc { display: block; height: 96px; resize: vertical; font: 500 13px/19px var(--font-sans); -webkit-user-select: text; }
-  #themeMsg { font-size: 13px; color: var(--muted-foreground); }
-  #themeMsg.err { color: var(--destructive); }
-  .g-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr) 28px; align-items: center; gap: 8px; padding: 7px 0; border-top: var(--stroke-hairline) solid var(--border); font: 14px var(--font-mono); }
-  .g-row:last-of-type { border-bottom: var(--stroke-hairline) solid var(--border); }
-  .g-row .h { color: var(--muted-foreground); text-decoration: line-through; text-decoration-color: var(--destructive); overflow-wrap: anywhere; }
-  .g-row .a { color: var(--diagram-link); text-align: center; }
+  .panel .hint.err { color: var(--app-danger); }
+  #themeDesc { display: block; height: 96px; resize: vertical; font: 500 13px/19px var(--app-font); -webkit-user-select: text; }
+  #themeMsg { font-size: 13px; color: var(--app-fg2); }
+  #themeMsg.err { color: var(--app-danger); }
+  .g-row { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr) 28px; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--app-line); font: 14px var(--app-mono); }
+  .g-row:last-of-type { border-bottom: 1px solid var(--app-line); }
+  .g-row .h { color: var(--app-fg2); text-decoration: line-through; text-decoration-color: var(--app-danger); overflow-wrap: anywhere; }
+  .g-row .a { color: var(--app-fg3); text-align: center; }
   .g-row .c { font-weight: 600; overflow-wrap: anywhere; }
-  .g-x { border: none; padding: 2px 6px; color: var(--muted-foreground); font-size: 16px; line-height: 16px; }
-  .g-x:hover:not(:disabled) { color: var(--destructive); background: transparent; }
+  .g-x { border: none; background: transparent; padding: 2px 6px; color: var(--app-fg3); font-size: 16px; line-height: 16px; }
+  .g-x:hover:not(:disabled) { color: var(--app-danger); background: transparent; }
   .g-terms { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }
-  .g-term { display: inline-flex; align-items: center; gap: 2px; font: 13px var(--font-mono); background: var(--secondary); color: var(--secondary-foreground); padding: 3px 4px 3px 10px; }
+  .g-term { display: inline-flex; align-items: center; gap: 2px; font: 13px var(--app-mono); background: var(--app-sunken); color: var(--app-fg2); padding: 2px 4px 2px 10px; border-radius: var(--app-r-pill); box-shadow: inset 0 0 0 1px var(--app-line); }
   .g-sec { margin-bottom: 26px; }
   /* Check transcript: proposed fixes to review */
   .ck-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-  .ck-head .ck-n { font-size: 13px; color: var(--muted-foreground); margin-right: auto; }
-  .ck-fix { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 9px 0; border-top: var(--stroke-hairline) solid var(--border); font-size: 14px; line-height: 21px; }
-  .ck-fix a { font: 12px/21px var(--font-mono); color: var(--muted-foreground); cursor: pointer; }
-  .ck-fix a:hover { color: var(--foreground); }
-  .ck-fix .why { display: block; font-size: 12px; color: var(--muted-foreground); }
-  .ck-fix del { color: var(--destructive); text-decoration: line-through; }
-  .ck-fix ins { text-decoration: none; background: var(--success-subtle); }
+  .ck-head .ck-n { font-size: 13px; color: var(--app-fg2); margin-right: auto; }
+  .ck-fix { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 9px 0; border-top: 1px solid var(--app-line); font-size: 14px; line-height: 21px; }
+  .ck-fix a { font: 12px/21px var(--app-mono); color: var(--app-fg3); cursor: pointer; }
+  .ck-fix a:hover { color: var(--app-fg); }
+  .ck-fix .why { display: block; font-size: 12px; color: var(--app-fg2); }
+  .ck-fix del { color: var(--app-danger); text-decoration: line-through; }
+  .ck-fix ins { text-decoration: none; background: var(--app-ok-soft); border-radius: 3px; }
   .ck-fix .ck-act { display: flex; gap: 6px; }
-  .ck-fix .ck-act button { padding: 2px 10px; font-size: 12.5px; }
+  .ck-fix .ck-act button { padding: 1px 10px; font-size: var(--app-text-sm); }
   .ck-fix.done { opacity: .55; }
-  .ck-fix .ck-st { font-size: 12px; color: var(--muted-foreground); white-space: nowrap; }
-  .seg.has-fix .txt { text-decoration: underline wavy var(--diagram-link); text-decoration-thickness: 1px; text-underline-offset: 4px; }
+  .ck-fix .ck-st { font-size: 12px; color: var(--app-fg2); white-space: nowrap; }
+  .seg.has-fix .txt { text-decoration: underline wavy var(--app-accent); text-decoration-thickness: 1px; text-underline-offset: 4px; }
   .m-row { grid-template-columns: minmax(0, 1fr) auto 28px; font-size: 13.5px; }
-  .m-row .pg { color: var(--muted-foreground); }
+  .m-row .pg { color: var(--app-fg2); }
   #matAdd { margin-top: 12px; }
 
-  /* Docs tab: the editor (docs.js). Headings and title in the theme's serif, text in its sans. */
- flex: 1; min-width: 60px; max-width: none; font-size: 13px; padding: 6px 8px; -webkit-user-select: text; }
+  /* Docs tab: the editor (docs.js), in the window's type: bold sans headings, quiet ink. */
   #docsView { flex: 1; min-height: 0; display: flex; flex-direction: column; }
   #docScroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-user-select: text; }
   #docPage { max-width: 760px; margin: 0 auto; padding: 26px 44px 200px; }
   #docTitle { display: block; width: 100%; border: none; background: transparent; outline: none; padding: 0; margin: 0 0 18px;
-    font: 600 32px/1.2 var(--font-serif); letter-spacing: -0.01em; color: var(--foreground); -webkit-user-select: text; }
-  #docTitle::placeholder { color: var(--muted-foreground); opacity: .6; }
-  #docBody { outline: none; font: 16px/1.65 var(--font-sans); color: var(--foreground); -webkit-user-select: text; overflow-wrap: anywhere; }
+    font: 700 32px/1.2 var(--app-font); letter-spacing: -0.015em; color: var(--app-fg); -webkit-user-select: text; }
+  #docTitle::placeholder { color: var(--app-fg3); opacity: .7; }
+  #docBody { outline: none; font: 16px/1.65 var(--app-font); color: var(--app-fg); -webkit-user-select: text; overflow-wrap: anywhere; }
   #docBody > * { position: relative; margin: 0 0 .65em; }
-  #docBody h1, #docBody h2 { font-family: var(--font-serif); font-weight: 600; letter-spacing: -0.005em; }
-  #docBody h1 { font-size: 27px; line-height: 1.3; margin: 1.15em 0 .35em; }
-  #docBody h2 { font-size: 22px; line-height: 1.3; margin: 1.1em 0 .3em; }
-  #docBody h3 { font: 600 17.5px/1.4 var(--font-sans); margin: 1em 0 .25em; }
+  #docBody h1, #docBody h2 { font-family: var(--app-font); font-weight: 700; letter-spacing: -0.01em; }
+  #docBody h1 { font-size: 26px; line-height: 1.3; margin: 1.15em 0 .35em; }
+  #docBody h2 { font-size: 21px; line-height: 1.3; margin: 1.1em 0 .3em; }
+  #docBody h3 { font: 600 17px/1.4 var(--app-font); margin: 1em 0 .25em; }
   #docBody > :first-child { margin-top: 0; }
   #docBody .li { --in: 0; padding-left: calc(26px + var(--in) * 24px); margin-bottom: .2em; }
   #docBody .li[data-in="1"] { --in: 1; } #docBody .li[data-in="2"] { --in: 2; } #docBody .li[data-in="3"] { --in: 3; } #docBody .li[data-in="4"] { --in: 4; }
-  #docBody .li::before { position: absolute; left: calc(var(--in) * 24px); width: 20px; text-align: center; color: var(--muted-foreground); }
+  #docBody .li::before { position: absolute; left: calc(var(--in) * 24px); width: 20px; text-align: center; color: var(--app-fg2); }
   #docBody .li[data-k="ul"]::before { content: "•"; }
   #docBody .li[data-k="ul"][data-in="1"]::before, #docBody .li[data-k="ul"][data-in="3"]::before { content: "◦"; }
   #docBody .li[data-k="ol"]::before { content: attr(data-n) "."; text-align: right; width: 20px; font-variant-numeric: tabular-nums; }
-  #docBody .li[data-k="todo"]::before { content: ""; top: .32em; left: calc(var(--in) * 24px + 3px); width: 13px; height: 13px; border: 1.5px solid var(--muted-foreground); border-radius: 3px; cursor: pointer; }
-  #docBody .li[data-k="todo"][data-done]::before { background: var(--primary); border-color: var(--primary); }
+  #docBody .li[data-k="todo"]::before { content: ""; top: .32em; left: calc(var(--in) * 24px + 3px); width: 14px; height: 14px; border: 1.5px solid var(--app-fg3); border-radius: 4px; cursor: pointer; }
+  #docBody .li[data-k="todo"][data-done]::before { background: var(--app-accent); border-color: var(--app-accent); }
   #docBody .li[data-k="todo"][data-done]::after { content: ""; position: absolute; top: .5em; left: calc(var(--in) * 24px + 7.5px); width: 4px; height: 8px;
-    border: solid var(--primary-foreground); border-width: 0 1.8px 1.8px 0; transform: rotate(45deg); pointer-events: none; }
-  #docBody .li[data-done] { color: var(--muted-foreground); text-decoration: line-through; }
-  #docBody blockquote { margin-left: 0; margin-right: 0; padding: 1px 0 1px 16px; border-left: var(--stroke-strong) solid var(--border); color: var(--muted-foreground); }
-  #docBody blockquote b { color: var(--foreground); }
-  #docBody pre { font: 13.5px/1.6 var(--font-mono); background: var(--muted); padding: 12px 16px; white-space: pre-wrap; border-radius: var(--radius-xl); }
-  #docBody pre:not([data-lang=""])::after { content: attr(data-lang); position: absolute; top: 4px; right: 10px; font: 11px var(--font-mono); color: var(--muted-foreground); }
-  #docBody code { font: .87em var(--font-mono); background: var(--muted); padding: 1px 5px; border-radius: 3px; }
-  #docBody a { color: var(--diagram-link); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-  #docBody a.tl { font: 12px/18px var(--font-mono); text-decoration: none; border: var(--stroke-hairline) solid var(--diagram-link); padding: 0 5px; margin: 0 1px; vertical-align: 1px; white-space: nowrap; }
-  #docBody a.tl:hover { background: var(--accent); }
-  #docBody hr { border: none; border-top: var(--stroke-hairline) solid var(--border); margin: 1.5em 0; padding: 4px 0; background-clip: content-box; cursor: default; }
+    border: solid var(--app-accent-fg); border-width: 0 1.8px 1.8px 0; transform: rotate(45deg); pointer-events: none; }
+  #docBody .li[data-done] { color: var(--app-fg3); text-decoration: line-through; }
+  #docBody blockquote { margin-left: 0; margin-right: 0; padding: 1px 0 1px 16px; border-left: 3px solid var(--app-fg); color: var(--app-fg2); }
+  #docBody blockquote b { color: var(--app-fg); }
+  #docBody pre { font: 13.5px/1.6 var(--app-mono); background: var(--app-sunken); padding: 12px 16px; white-space: pre-wrap; border-radius: var(--app-r-sm); }
+  #docBody pre:not([data-lang=""])::after { content: attr(data-lang); position: absolute; top: 4px; right: 10px; font: 11px var(--app-mono); color: var(--app-fg3); }
+  #docBody code { font: .85em var(--app-mono); color: var(--app-danger); background: var(--app-sunken); padding: 1px 5px; border-radius: 4px; }
+  #docBody a { color: inherit; text-decoration: underline; text-decoration-color: var(--app-fg3); text-underline-offset: 3px; cursor: pointer; }
+  #docBody a:hover { text-decoration-color: currentColor; }
+  #docBody a.tl { font: 11.5px/18px var(--app-mono); text-decoration: none; color: var(--app-accent-ink); background: var(--app-accent-soft); border-radius: 4px; padding: 0 5px; margin: 0 1px; vertical-align: 1px; white-space: nowrap; }
+  #docBody a.tl:hover { background: var(--app-accent-soft); }
+  #docBody hr { border: none; border-top: 1px solid var(--app-line); margin: 1.5em 0; padding: 4px 0; background-clip: content-box; cursor: default; }
   #docBody .mathb { text-align: center; padding: 6px 0; cursor: pointer; overflow-x: auto; overflow-y: hidden; }
-  #docBody .mathb:hover, #docBody .chartb:hover, #docBody .im:hover { background: var(--muted); }
+  #docBody .mathb:hover, #docBody .chartb:hover, #docBody .im:hover { background: var(--app-hover); border-radius: 4px; }
   #docBody .im { cursor: pointer; }
-  #docBody .hint-empty, .cerr { color: var(--muted-foreground); font-size: 14px; }
-  .cerr { padding: 12px; border: var(--stroke-hairline) dashed var(--border); }
+  #docBody .hint-empty, .cerr { color: var(--app-fg2); font-size: 14px; }
+  .cerr { padding: 12px; border: 1px dashed var(--app-line-strong); border-radius: var(--app-r-sm); }
   #docBody figure { margin: 1.1em 0; }
   #docBody figure img { display: block; max-width: 100%; margin: 0 auto; }
   #docBody figure.up img { opacity: .5; }
-  #docBody figcaption { margin-top: 6px; text-align: center; font-size: 13px; color: var(--muted-foreground); outline: none; min-height: 1.4em; -webkit-user-select: text; }
+  #docBody figcaption { margin-top: 6px; text-align: center; font-size: 13px; color: var(--app-fg3); outline: none; min-height: 1.4em; -webkit-user-select: text; }
   #docBody figcaption:empty:focus::before { content: "Add a caption"; opacity: .6; }
   #docBody .chartb { cursor: pointer; padding: 6px 0; }
   .cw { position: relative; overflow: hidden; }
   .dchart > * > :first-child { margin-top: 0; }
   .dchart.pr-slide { position: absolute; left: 0; top: 0; width: 960px; height: auto; padding: 8px 0; transform-origin: 0 0; background: transparent; overflow: visible; }
-  #docBody .sel { outline: var(--stroke-strong) solid var(--diagram-link); outline-offset: 3px; }
+  #docBody .sel { outline: 2px solid var(--app-accent); outline-offset: 3px; border-radius: 2px; }
   #docBody .tbl { overflow-x: auto; }
   #docBody table { border-collapse: collapse; width: 100%; font-size: 14.5px; line-height: 1.5; }
-  #docBody th, #docBody td { border: var(--stroke-hairline) solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; outline: none; min-width: 60px; -webkit-user-select: text; }
-  #docBody th { background: var(--muted); font-weight: 600; }
-  #docBody td:focus, #docBody th:focus { box-shadow: inset 0 0 0 1.5px var(--diagram-link); }
+  #docBody th, #docBody td { border: 1px solid var(--app-line); padding: 6px 10px; text-align: left; vertical-align: top; outline: none; min-width: 60px; -webkit-user-select: text; }
+  #docBody th { background: var(--app-bg); font-weight: 600; }
+  #docBody td:focus, #docBody th:focus { box-shadow: inset 0 0 0 1.5px var(--app-accent); }
   .tbl-tools { display: flex; gap: 4px; margin-top: 4px; visibility: hidden; }
   .tbl:hover .tbl-tools, .tbl:focus-within .tbl-tools { visibility: visible; }
-  .tbl-tools button { border: none; padding: 2px 8px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
-  #docBody .ph::before { content: attr(data-ph); position: absolute; left: 0; color: var(--muted-foreground); opacity: .65; pointer-events: none; white-space: nowrap; }
+  .tbl-tools button { border: none; background: transparent; padding: 2px 8px; font-size: 12px; font-weight: 500; color: var(--app-fg2); }
+  #docBody .ph::before { content: attr(data-ph); position: absolute; left: 0; color: var(--app-fg3); opacity: .8; pointer-events: none; white-space: nowrap; }
   #docBody .li.ph::before { content: none; }
   /* Floating bits of the doc editor: selection toolbar, / menu, edit box */
-  .float { position: fixed; z-index: 30; display: none; background: var(--card); color: var(--card-foreground); border: var(--stroke-hairline) solid var(--border);
-    box-shadow: 0 6px 24px color-mix(in oklch, var(--foreground) 14%, transparent); }
-  #dtool { padding: 3px; white-space: nowrap; }
-  #dtool button { border: none; padding: 4px 9px; font: 600 13px/18px var(--font-sans); }
-  #dtool i { display: inline-block; width: var(--stroke-hairline); height: 16px; background: var(--border); vertical-align: middle; margin: 0 3px; }
-  #dslash { width: 260px; max-height: 320px; overflow-y: auto; padding: 4px 0; }
-  .ds-i { display: flex; justify-content: space-between; gap: 10px; padding: 6px 12px; font-size: 13.5px; cursor: default; }
-  .ds-i small { color: var(--muted-foreground); font: 11.5px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ds-i.act { background: var(--accent); color: var(--accent-foreground); }
+  .float { position: fixed; z-index: 30; display: none; background: var(--app-raised); color: var(--app-fg); border-radius: var(--app-r-md); box-shadow: var(--app-sh2); }
+  #dtool { padding: 4px; white-space: nowrap; }
+  #dtool button { border: none; background: transparent; padding: 3px 9px; font: 600 13px/18px var(--app-font); }
+  #dtool i { display: inline-block; width: 1px; height: 16px; background: var(--app-line); vertical-align: middle; margin: 0 3px; }
+  #dslash { width: 260px; max-height: 320px; overflow-y: auto; padding: 5px; }
+  .ds-i { display: flex; justify-content: space-between; gap: 10px; padding: 5px 9px; border-radius: var(--app-r-sm); font-size: var(--app-text); cursor: default; }
+  .ds-i small { color: var(--app-fg3); font: 11.5px var(--app-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ds-i.act { background: var(--app-hover); }
   #dpop { width: 440px; padding: 10px 12px; }
-  .dp-l { font-size: 12px; color: var(--muted-foreground); margin-bottom: 6px; }
+  .dp-l { font-size: 12px; color: var(--app-fg2); margin-bottom: 6px; }
   #dpop .dp-in { display: block; width: 100%; max-width: none; font-size: 13.5px; -webkit-user-select: text; }
   #dpop textarea.dp-in { height: 110px; resize: vertical; }
-  #dpop .dp-in.mono { font-family: var(--font-mono); font-size: 12.5px; line-height: 18px; }
-  .dp-prev { margin-top: 8px; padding: 8px; background: var(--background); border: var(--stroke-hairline) solid var(--border); overflow-x: auto; text-align: center; }
+  #dpop .dp-in.mono { font-family: var(--app-mono); font-size: 12.5px; line-height: 18px; }
+  .dp-prev { margin-top: 8px; padding: 8px; background: var(--app-bg); border-radius: var(--app-r-sm); overflow-x: auto; text-align: center; }
   .dp-chart { text-align: left; }
-  .dp-err { margin: 0; color: var(--destructive); font-size: 12.5px; text-align: left; }
+  .dp-err { margin: 0; color: var(--app-danger); font-size: 12.5px; text-align: left; }
   .dp-row { display: flex; gap: 6px; margin-top: 10px; }
-  .dp-row button { padding: 4px 10px; font-size: 12.5px; }
+  .dp-row button { padding: 2px 10px; font-size: var(--app-text-sm); }
 
-  footer { border-top: var(--stroke-hairline) solid var(--border); background: var(--card); padding: 8px 20px; font-size: 12.5px; color: var(--muted-foreground); }
-  #saved a { color: var(--foreground); cursor: pointer; text-decoration: underline; }
   #toast { position: fixed; top: 14px; right: 14px; max-width: 380px; display: flex; flex-direction: column; gap: 8px; z-index: 9; }
-  .toast { background: var(--card); border: var(--stroke-hairline) solid var(--border); border-left: var(--stroke-strong) solid var(--success); padding: 9px 12px; font-size: 13px; }
-  .toast.err { border-left-color: var(--destructive); }
+  .toast { display: flex; gap: 10px; align-items: baseline; background: var(--app-raised); border-radius: var(--app-r-md); box-shadow: var(--app-sh2); padding: 9px 12px; font-size: 13px;
+    animation: pop-in .2s var(--app-ease); }
+  .toast::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--app-ok); transform: translateY(-1px); }
+  .toast.err::before { background: var(--app-danger); }
   .spacer { flex: 1; }
   .claude-mark { display: inline-flex; width: 18px; height: 18px; flex: none; }
   .claude-mark svg { width: 100%; height: 100%; }
   .su h1 .claude-mark { width: 30px; height: 30px; margin-right: 10px; vertical-align: -3px; }
 
   /* First-run setup */
-  #setup { position: fixed; inset: 0; z-index: 20; background: var(--background); display: none; overflow-y: auto; }
+  #setup { position: fixed; inset: 0; z-index: 20; background: var(--app-bg); display: none; overflow-y: auto; }
   #setup.on { display: block; }
-  #ask { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center; background: rgb(0 0 0 / .35); }
+  #ask { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center; background: var(--app-scrim); }
   #ask.on { display: flex; }
-  #ask > div { max-width: 440px; margin: 20px; padding: 20px 22px 16px; background: var(--card); color: var(--card-foreground); border: var(--stroke-hairline) solid var(--border); }
-  #askMsg { font: 500 14px/21px var(--font-sans); margin: 0 0 16px; }
+  #ask > div { max-width: 440px; margin: 20px; padding: 18px 18px 14px; background: var(--app-raised); color: var(--app-fg); border-radius: var(--app-r-lg); box-shadow: var(--app-sh3); }
+  #askMsg { font: 500 14px/21px var(--app-font); margin: 0 0 16px; padding: 0 2px; }
   #ask .row { display: flex; justify-content: flex-end; gap: 8px; }
   .su { max-width: 620px; margin: 0 auto; padding: 56px 32px 40px; display: flex; flex-direction: column; min-height: 100%; box-sizing: border-box; }
   .su-steps { display: flex; gap: 6px; }
-  .su-steps i { flex: 1; height: var(--stroke-strong); background: var(--border); }
-  .su-steps i.on { background: var(--primary); }
-  .su .eyebrow { font: 600 12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); margin: 0 0 10px; }
-  .su h1 { font: 600 32px/40px var(--font-sans); letter-spacing: -0.02em; margin: 0 0 14px; }
-  .su p, .su li { font-size: 15px; line-height: 23px; }
-  .su p { margin: 0 0 14px; color: var(--muted-foreground); }
+  .su-steps i { flex: 1; height: 4px; border-radius: var(--app-r-pill); background: var(--app-line); }
+  .su-steps i.on { background: var(--app-accent); }
+  .su .eyebrow { font: 500 var(--app-text-sm) var(--app-font); letter-spacing: 0; text-transform: none; color: var(--app-fg3); margin: 0 0 10px; } /* not the slides' .eyebrow */
+  .su h1 { font: 700 32px/40px var(--app-font); letter-spacing: -0.02em; margin: 0 0 14px; }
+  .su p, .su li { font-size: var(--app-text-lg); line-height: 23px; }
+  .su p { margin: 0 0 14px; color: var(--app-fg2); }
   .su ul { margin: 0 0 18px; padding-left: 20px; }
-  .su b { color: var(--foreground); }
-  .su code { font: 13px var(--font-mono); background: var(--muted); padding: 1px 5px; -webkit-user-select: text; }
-  .su pre { font: 13px/20px var(--font-mono); background: var(--card); border: var(--stroke-hairline) solid var(--border); padding: 10px 12px; margin: 0 0 14px; white-space: pre-wrap; -webkit-user-select: text; }
-  .su .note { border-left: var(--stroke-strong) solid var(--warning); background: var(--warning-subtle); color: var(--foreground); padding: 10px 14px; }
-  .su .box { border: var(--stroke-hairline) solid var(--border); background: var(--card); padding: 16px; margin: 6px 0 16px; display: grid; gap: 10px; }
-  .su .box label { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 10px; font-size: 13.5px; color: var(--muted-foreground); }
+  .su b { color: var(--app-fg); }
+  .su code { font: 13px var(--app-mono); background: var(--app-sunken); padding: 1px 5px; border-radius: 4px; -webkit-user-select: text; }
+  .su pre { font: 13px/20px var(--app-mono); background: var(--app-sunken); border-radius: var(--app-r-sm); padding: 10px 12px; margin: 0 0 14px; white-space: pre-wrap; -webkit-user-select: text; }
+  .su .note { background: var(--app-warn-soft); color: var(--app-fg); padding: 10px 14px; border-radius: var(--app-r-md); }
+  .su .box { border-radius: var(--app-r-md); box-shadow: 0 0 0 1px var(--app-line), var(--app-sh1); background: var(--app-surface); padding: 16px; margin: 6px 0 16px; display: grid; gap: 10px; }
+  .su .box label { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 10px; font-size: 13.5px; color: var(--app-fg2); }
   .su .box .picker, .su .box input { max-width: none; width: 100%; }
-  .su .ok { color: var(--success); font-weight: 600; }
-  .su .bad { color: var(--destructive); font-weight: 600; }
-  .su .bar { height: 6px; background: var(--muted); overflow: hidden; }
-  .su .bar > div { height: 100%; width: 0; background: var(--primary); transition: width .4s; }
+  .su .ok { color: var(--app-ok); font-weight: 600; }
+  .su .bad { color: var(--app-danger); font-weight: 600; }
+  .su .bar { height: 6px; border-radius: var(--app-r-pill); background: var(--app-sunken); overflow: hidden; }
+  .su .bar > div { height: 100%; width: 0; background: var(--app-accent); transition: width .4s; }
   #suBody { margin: auto 0; padding: 24px 0 40px; } /* centred between the progress bar and the buttons */
   .su-nav { padding-top: 28px; display: flex; gap: 10px; align-items: center; }
   .su.single .su-steps, .su.single #suBack, .su.single #suSkip { visibility: hidden; }
@@ -378,22 +428,26 @@
   .su.wide #suBody { margin: 0; }
   .st { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 36px; align-items: start; }
   .st-ctl { display: grid; gap: 16px; position: sticky; top: 16px; }
-  .st-ctl h4 { margin: 0 0 6px; font: 600 12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
-  .st-ctl .switch button { flex: 1; }
-  .st-ctl .hint { margin: 6px 0 0; font-size: 12.5px; line-height: 18px; color: var(--muted-foreground); }
-  #stRules { display: block; width: 100%; height: 120px; resize: vertical; font: 500 13px/19px var(--font-sans); -webkit-user-select: text; }
+  .st-ctl h4 { margin: 0 0 6px; font: 600 var(--app-text-sm) var(--app-font); color: var(--app-fg2); }
+  /* Segmented control: the same track and raised "on" as the Slides/Docs tabs. */
+  .switch { display: flex; gap: 2px; padding: 3px; border-radius: var(--app-r-md); background: var(--app-sunken); }
+  .switch button { flex: 1 1 auto; white-space: nowrap; border: none; background: transparent; padding: 3px 8px; border-radius: var(--app-r-sm); color: var(--app-fg2); font-weight: 500; }
+  .switch button:hover:not(:disabled) { background: transparent; color: var(--app-fg); }
+  .switch button.on, .switch button.on:hover:not(:disabled) { background: var(--app-seg-on); color: var(--app-fg); box-shadow: var(--app-sh-raised); }
+  .st-ctl .hint { margin: 6px 0 0; font-size: 12.5px; line-height: 18px; color: var(--app-fg2); }
+  #stRules { display: block; width: 100%; height: 120px; resize: vertical; font: 500 13px/19px var(--app-font); -webkit-user-select: text; }
   .st-prev { display: grid; gap: 14px; min-width: 0; }
-  .st-src { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; font-size: 13px; color: var(--muted-foreground); }
-  .st-src a { color: var(--diagram-link); cursor: pointer; }
+  .st-src { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; font-size: 13px; color: var(--app-fg2); }
+  .st-src a { color: var(--app-accent-ink); cursor: pointer; }
   .st-bar { display: flex; gap: 10px; align-items: center; }
   .st-bar .field-in { flex: 1; max-width: none; font-size: 13.5px; padding: 8px 10px; }
   .st .si-notes { font-size: 13px; line-height: 19px; margin: 6px 0 0; }
-  .st-msg { min-height: 18px; margin-top: -6px; font-size: 13px; color: var(--muted-foreground); }
-  .st-msg.err { color: var(--destructive); }
-  .st-msg.dirty { color: var(--foreground); }
+  .st-msg { min-height: 18px; margin-top: -6px; font-size: 13px; color: var(--app-fg2); }
+  .st-msg.err { color: var(--app-danger); }
+  .st-msg.dirty { color: var(--app-fg); }
   #stSlides { display: grid; gap: 22px; }
   #stSlides.busy { opacity: .45; }
-  .st-wait { border: var(--stroke-hairline) dashed var(--border); aspect-ratio: 16 / 9; display: grid; place-items: center; color: var(--muted-foreground); font-size: 14px; text-align: center; padding: 20px; }
+  .st-wait { border: 1px dashed var(--app-line-strong); border-radius: 4px; aspect-ratio: 16 / 9; display: grid; place-items: center; color: var(--app-fg2); font-size: 14px; text-align: center; padding: 20px; }
 </style>
 </head>
 <body>
@@ -411,6 +465,8 @@
 <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
 <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></symbol>
 <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 21V5M8 7h7"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></symbol>
+<symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></symbol>
 <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
 <symbol id="i-text" viewBox="0 0 24 24"><path d="M4 7V5h11v2M9.5 5v14M7 19h5M14 12h7M17.5 12v7"/></symbol>
 <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
@@ -421,23 +477,33 @@
 </defs></svg>
 <header>
   <div class="row">
-    <input id="title" placeholder="Lecture title (e.g. Networks – DHCP)" spellcheck="false">
+    <div id="lecName"><input id="title" placeholder="Lecture title (e.g. Networks – DHCP)" spellcheck="false"><button id="lecBtn" class="hd-menu" title="Open a lecture (⌘O)"><svg class="ic chev"><use href="#i-chev"/></svg></button></div>
     <input id="course" placeholder="Course" title="Course name: helps Claude fix misheard terms, keeps the course's glossary, and goes in the slide footer" spellcheck="false">
     <span class="spacer"></span>
+    <span id="status">Starting…</span>
     <div id="meter" title="Microphone level"><div></div></div>
     <div id="timer">00:00:00</div>
     <button id="startBtn" class="rec" disabled><span class="dot"></span>Start</button>
     <button id="contBtn" class="rec" style="display:none" title="Record more of the lecture shown below, into the same transcript, audio and deck. Times continue where it ended"><span class="dot"></span>Continue</button>
+    <button id="recSetBtn" class="hd-menu" title="Recording settings: microphone, language, saving the audio"><svg class="ic"><use href="#i-mic"/></svg><svg class="ic chev"><use href="#i-chev"/></svg></button>
     <button id="pauseBtn" style="display:none">Pause</button>
     <button id="stopBtn" style="display:none">Stop</button>
   </div>
-  <div class="row settings">
-    <label id="modelWrap">Model <select id="model"></select></label>
-    <label id="langWrap" style="display:none">Language <select id="lang"></select></label>
-    <label>Mic <select id="device"></select></label>
-    <label><input type="checkbox" id="saveAudio" checked> Also save audio</label>
-    <span class="spacer"></span>
-    <span id="status">Starting…</span>
+  <div class="pop" id="lecMenu">
+    <div class="lm-search"><svg class="ic"><use href="#i-search"/></svg><input id="lecFilter" placeholder="Search lectures" spellcheck="false" autocomplete="off"></div>
+    <div id="lecList" role="listbox"></div>
+    <hr>
+    <button id="lecNew"><svg class="ic"><use href="#i-plus"/></svg><span class="t">New lecture</span><span class="k">name it, then press Start</span></button>
+    <button id="lecRename"><svg class="ic"><use href="#i-pen"/></svg><span class="t">Rename…</span><span class="k">the lecture and its files</span></button>
+    <div class="lm-info"><span id="lecFile">No lecture open</span><span id="words">0 words</span><span id="saved"></span><a id="lecReveal">Show in Finder</a></div>
+  </div>
+  <div class="pop" id="recMenu">
+    <div class="lab">Recording</div>
+    <div class="rs-row" id="modelWrap"><span>Model</span><select id="model"></select></div>
+    <div class="rs-row" id="langWrap" style="display:none"><span>Language</span><select id="lang"></select></div>
+    <div class="rs-row"><span>Microphone</span><select id="device"></select></div>
+    <hr>
+    <label class="rs-row"><input type="checkbox" id="saveAudio" checked>Also save the audio</label>
   </div>
 </header>
 
@@ -464,8 +530,8 @@
       <div class="cd-head">
         <span class="cd-side"></span>
         <span class="tabs" role="tablist">
-          <button class="on" id="tabSlides" role="tab">Slides<i class="tab-dot"></i></button>
-          <button id="docsBtn" role="tab" title="Your own docs about this lecture: notes, summaries, exercises">Docs<i class="tab-dot"></i></button>
+          <button class="on" id="tabSlides" role="tab"><svg class="ic"><use href="#i-slides"/></svg>Slides<i class="tab-dot"></i></button>
+          <button id="docsBtn" role="tab" title="Your own docs about this lecture: notes, summaries, exercises"><svg class="ic"><use href="#i-doc"/></svg>Docs<i class="tab-dot"></i></button>
         </span>
         <span class="cd-side r"><span id="docSavedTxt"></span></span>
       </div>
@@ -553,11 +619,11 @@
           <p class="gh">On your Claude subscription, for slides, docs, review cards and checks. Rebuild deck, Review cards, Draft notes and Check transcript always use at least High.</p>
           <h4 class="gl">Look</h4>
           <div class="grp">
-            <label class="gr">Theme<span class="spacer"></span><button id="themeDel" class="lnk">Delete</button><select id="themeSel"><option value="">Default</option></select></label>
+            <label class="gr">Slide theme<span class="spacer"></span><button id="themeDel" class="lnk">Delete</button><select id="themeSel"><option value="">Default</option></select></label>
             <button class="gr" id="themeNew">New theme with Claude…<span class="spacer"></span><span class="gt">›</span></button>
             <button class="gr" id="themeFolder">Open themes folder<span class="spacer"></span><span class="gt">›</span></button>
           </div>
-          <p class="gh">Colours and fonts of the slides, exported decks and this window. A theme is a CSS file in the themes folder: edit it, or drop in your own.</p>
+          <p class="gh">Colours and fonts of the slides and exported decks. A theme is a CSS file in the themes folder: edit it, or drop in your own.</p>
           <h4 class="gl">Slides</h4>
           <div class="grp"><button class="gr" id="styleBtn">Slide style<span class="spacer"></span><span class="gt">›</span></button></div>
           <p class="gh">How much goes on a slide, how it's phrased, diagrams or text, and your own rules, with sample slides.</p>
@@ -578,14 +644,8 @@
   </aside>
 </div>
 
-<footer class="row">
-  <span id="words">0 words</span>
-  <span id="saved"></span>
-  <span class="spacer"></span>
-  <select id="recent" title="Open a past lecture"><option value="">Open a past lecture…</option></select>
-</footer>
 <div id="toast"></div>
-<div id="dtool" class="float"><button data-f="bold" title="Bold (⌘B)">B</button><button data-f="italic" title="Italic (⌘I)" style="font-style:italic">I</button><button data-f="strike" title="Strikethrough (⇧⌘X)" style="text-decoration:line-through">S</button><button data-f="code" title="Code (⌘E)" style="font-family:var(--font-mono)">{ }</button><i></i><button data-f="link" title="Link (⌘K)">Link</button></div>
+<div id="dtool" class="float"><button data-f="bold" title="Bold (⌘B)">B</button><button data-f="italic" title="Italic (⌘I)" style="font-style:italic">I</button><button data-f="strike" title="Strikethrough (⇧⌘X)" style="text-decoration:line-through">S</button><button data-f="code" title="Code (⌘E)" style="font-family:var(--app-mono)">{ }</button><i></i><button data-f="link" title="Link (⌘K)">Link</button></div>
 <div id="dslash" class="float"></div>
 <div id="dpop" class="float"></div>
 <div id="ask"><div><p id="askMsg"></p><div class="row"><button id="askNo">Cancel</button><button id="askYes" class="go">OK</button></div></div></div>
@@ -747,7 +807,10 @@ function render() {
   setText($("pauseBtn"), paused ? "Resume" : "Pause");
   $("startBtn").disabled = $("contBtn").disabled = !modelReady || !curModel();
   $("contBtn").style.display = !busy && curPath && segs.length ? "" : "none";
-  for (const id of ["model", "lang", "device", "saveAudio", "title", "recent"]) $(id).disabled = busy;
+  $("recSetBtn").style.display = busy ? "none" : "";
+  if (busy && $("recMenu").classList.contains("open")) closePops();
+  for (const id of ["model", "lang", "device", "saveAudio"]) $(id).disabled = busy;
+  renderLecName();
   $("langWrap").style.display = curModel()?.langs === "multi" ? "" : "none";
   const st = $("status");
   st.className = rec ? "rec" : paused ? "paused" : "";
@@ -882,6 +945,7 @@ function goToTime(hms) {
 /* ---------- slides ---------- */
 function setCurPath(p) {
   if (p === curPath) return;
+  renderLecName(p);
   curPath = p; deck = null; slidesErr = ""; renderedCount = -1;
   if (typeof Docs !== "undefined") Docs.lecture(p);
   renderSlides();
@@ -1119,6 +1183,7 @@ const OK_SVG = '<svg class="ic"><use href="#i-check"/></svg>';
 function draftBusy() { return typeof Docs !== "undefined" && Docs.drafting; }
 function closePops() {
   for (const m of document.querySelectorAll(".pop.open")) { m.classList.remove("open"); m.opener?.classList.remove("open"); }
+  if (document.activeElement?.closest?.(".pop:not(.open)")) document.activeElement.blur();
 }
 // Opens `menu` above `btn` (filled by `fill`), inside the card; a second click closes it.
 function togglePop(menu, btn, fill) {
@@ -1132,6 +1197,7 @@ function togglePop(menu, btn, fill) {
   menu.style.left = Math.max(12, Math.min(r.left - card.left, card.width - menu.offsetWidth - 12)) + "px";
 }
 addEventListener("mousedown", (e) => {
+  if (e.target.closest?.(".pk-list")) return; // a Picker list opened from inside a menu
   for (const m of document.querySelectorAll(".pop.open")) if (!m.contains(e.target) && !m.opener?.contains(e.target)) { m.classList.remove("open"); m.opener?.classList.remove("open"); }
   if (cmpMode && !e.target.closest("#composer, #modelMenu, #ask")) closeComposer();
 }, true);
@@ -1217,6 +1283,151 @@ $("slideMenu").onclick = (e) => {
   closePops(); $("si" + b.dataset.i)?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 $("moreBtn").onclick = () => togglePop($("moreMenu"), $("moreBtn"));
+// The header's menus open below their button: the lecture picker left-aligned with it, the
+// recording settings right-aligned. A second click closes. Returns whether it opened.
+function headerMenu(menu, btn, right, fill) {
+  const was = menu.classList.contains("open");
+  closePops(); if (was) return false;
+  fill?.();
+  menu.opener = btn; menu.classList.add("open"); btn.classList.add("open");
+  const r = btn.getBoundingClientRect(), w = menu.offsetWidth;
+  menu.style.top = (r.bottom + 6) + "px";
+  menu.style.left = Math.max(12, Math.min(right ? r.right - w : r.left, innerWidth - w - 12)) + "px";
+  return true;
+}
+$("recSetBtn").onclick = () => headerMenu($("recMenu"), $("recSetBtn"), true);
+
+/* ---------- the lecture picker (top left): past lectures, newest first, with a search ---------- */
+let recentList = [], lecAct = -1, renameOld = null, renameSent = null; // renameOld: the name while it's being renamed
+// "2026-11-17 09.28 Networks" → { title: "Networks", when: "Today, 09:28" }
+function lecParts(name) {
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2})\.(\d{2}) (.*)$/.exec(name);
+  if (!m) return { title: name, when: "" };
+  const d = new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5]), now = new Date();
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const ago = Math.round((day(now) - day(d)) / 864e5);
+  const date = ago === 0 ? "Today" : ago === 1 ? "Yesterday"
+    : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: d.getFullYear() === now.getFullYear() ? undefined : "numeric" });
+  return { title: m[6], when: date + ", " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
+}
+// `text` with every search word in it marked.
+function marked(text, words) {
+  const f = document.createDocumentFragment(), low = text.toLowerCase(), on = [...text].map(() => false);
+  for (const w of words) for (let i = low.indexOf(w); i >= 0; i = low.indexOf(w, i + w.length)) for (let j = i; j < i + w.length; j++) on[j] = true;
+  for (let i = 0, j; i < text.length; i = j) {
+    for (j = i; j < text.length && on[j] === on[i]; j++);
+    const t = document.createTextNode(text.slice(i, j));
+    if (on[i]) { const m = document.createElement("mark"); m.append(t); f.append(m); } else f.append(t);
+  }
+  return f;
+}
+function fillLecMenu() {
+  const words = $("lecFilter").value.toLowerCase().split(/\s+/).filter(Boolean), busy = state !== "idle";
+  const items = recentList.map((x) => ({ ...x, ...lecParts(x.name) }))
+    .filter((x) => words.every((w) => (x.title + " " + x.when + " " + x.name).toLowerCase().includes(w)));
+  const L = $("lecList"); L.textContent = ""; $("lecNew").disabled = busy;
+  const rn = $("lecRename"), why = renameBlock();
+  rn.style.display = curPath ? "" : "none"; rn.disabled = !!why; rn.title = why;
+  if (busy && items.length) L.insertAdjacentHTML("beforeend", '<div class="note">Stop the recording to open another lecture.</div>');
+  for (const x of items) {
+    const b = document.createElement("button");
+    b.dataset.path = x.path; b.disabled = busy; b.setAttribute("role", "option");
+    b.innerHTML = `<span class="ok">${x.path === curPath ? OK_SVG : ""}</span><span class="t"></span><span class="k"></span>`;
+    b.querySelector(".t").append(marked(x.title, words)); b.querySelector(".k").textContent = x.when;
+    L.append(b);
+  }
+  if (!items.length) L.insertAdjacentHTML("beforeend", `<div class="note">${recentList.length ? "No lecture matches." : "No lectures yet. Press Start to record one."}</div>`);
+  lecActivate(items.length && !busy ? 0 : -1);
+}
+const lecRows = () => [...$("lecList").querySelectorAll("button")];
+function lecActivate(i, scroll) {
+  const bs = lecRows(); lecAct = i;
+  bs.forEach((b, k) => b.classList.toggle("act", k === i));
+  if (scroll) bs[i]?.scrollIntoView({ block: "nearest" });
+}
+function openLecture(b) {
+  if (!b || b.disabled) return;
+  closePops();
+  if (b.dataset.path !== curPath) send("loadTranscript", { path: b.dataset.path });
+}
+function showFile(path, note) {
+  $("lecFile").textContent = path ? path.split("/").pop().replace(/\.md$/, "") : "No lecture open";
+  $("lecReveal").style.display = path ? "" : "none";
+  $("lecReveal").dataset.path = path || "";
+  $("saved").innerHTML = note ? '<span class="dot"></span>' : ""; if (note) $("saved").append(note);
+}
+function openLecMenu() {
+  $("lecFilter").value = "";
+  if (headerMenu($("lecMenu"), $("lecName"), false, fillLecMenu)) { send("recentList"); $("lecFilter").focus(); }
+}
+// Read-only (a picker) while a lecture is open or recording; a field for a new lecture's name,
+// or while the open one is being renamed.
+function renderLecName(p = curPath) {
+  if (renameOld != null && state !== "idle") return endRename(false);
+  const pick = (!!p || state !== "idle") && renameOld == null, t = $("title");
+  if (t.readOnly === pick && $("lecName").classList.contains("pick") === pick) return;
+  t.readOnly = pick; t.tabIndex = pick ? -1 : 0; $("lecName").classList.toggle("pick", pick);
+  $("lecName").classList.toggle("renaming", renameOld != null);
+  $("lecName").title = pick ? "Open a lecture (⌘O)" : "";
+  t.placeholder = pick ? "Untitled lecture" : "Lecture title (e.g. Networks – DHCP)";
+  if (pick && document.activeElement === t) t.blur();
+  fitTitle();
+}
+// On the name: the field takes the click when it's editable; otherwise the click opens the menu.
+$("lecName").onmousedown = (e) => { if (e.target === $("title") && !$("title").readOnly) return; e.preventDefault(); };
+$("lecName").onclick = (e) => { if (e.target === $("title") && !$("title").readOnly) return; openLecMenu(); };
+// New lecture: an empty page whose name is typed in the header, recorded with Start.
+$("lecNew").onclick = () => {
+  if (state !== "idle") return;
+  closePops();
+  clearTranscript(); showFile(null);
+  elapsed = 0; runStart = null; follow = true;
+  setCurPath(null);
+  $("title").value = ""; $("empty").style.display = "";
+  render(); $("title").focus();
+};
+// Rename: the name in the header becomes a field; Enter (or clicking away) renames the lecture
+// and its files, Escape keeps the old name.
+function renameBlock() {
+  if (!curPath) return "Open a lecture to rename it";
+  if (state !== "idle") return "Stop the recording to rename the lecture";
+  if (slidesBusy || check?.busy || draftBusy()) return "Wait for Claude to finish to rename the lecture";
+  return "";
+}
+function startRename() {
+  if (renameBlock()) return;
+  closePops();
+  const t = $("title"); renameOld = t.value;
+  renderLecName(); t.focus(); t.select();
+}
+function endRename(save) {
+  if (renameOld == null) return;
+  const t = $("title"), v = t.value.trim().replace(/\s+/g, " "), old = renameOld;
+  renameOld = null;
+  if (save && v && v !== old && curPath && !renameBlock()) {
+    t.value = v; renameSent = old;
+    Docs.saveNow(); // under the old name, before the files move
+    send("renameLecture", { path: curPath, title: v });
+  } else t.value = old;
+  renderLecName();
+}
+$("lecRename").onclick = startRename;
+$("title").addEventListener("keydown", (e) => {
+  if (renameOld == null) return;
+  if (e.key === "Enter") { e.preventDefault(); endRename(true); }
+  else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); endRename(false); }
+});
+$("title").addEventListener("blur", () => endRename(true));
+$("lecFilter").oninput = fillLecMenu;
+$("lecFilter").onkeydown = (e) => {
+  const n = lecRows().length;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); if (n && !lecRows()[0].disabled) lecActivate(Math.max(0, Math.min(n - 1, lecAct + (e.key === "ArrowDown" ? 1 : -1))), true); }
+  else if (e.key === "Enter") { e.preventDefault(); openLecture(lecRows()[lecAct]); }
+};
+$("lecList").onmousemove = (e) => { const b = e.target.closest("button"); if (b && !b.disabled) lecActivate(lecRows().indexOf(b)); };
+$("lecList").onclick = (e) => openLecture(e.target.closest("button[data-path]"));
+$("lecReveal").onclick = () => { const p = $("lecReveal").dataset.path; if (p) send("reveal", { path: p }); };
+showFile(null);
 $("moreMenu").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b && b.id !== "smaller" && b.id !== "bigger") closePops(); });
 
 $("tabSlides").onclick = () => { docsOpen = false; glossOpen = setOpen = false; renderGloss(); };
@@ -1323,8 +1534,7 @@ window.onEngine = (e) => {
       if ([...$("slideLang").options].some((o) => o.value === settings.slideLang)) $("slideLang").value = settings.slideLang;
       setThemes(e.themes, settings.theme);
       $("themeCss").textContent = e.themeCss || "";
-      const r = $("recent"); r.length = 1;
-      for (const x of e.recent || []) r.add(new Option(x.name, x.path));
+      recentList = e.recent || [];
       $("modelWrap").style.display = models.length > 1 ? "" : "none";
       if (!models.length) {
         $("empty").innerHTML = "The speech model isn't on this Mac yet.<br><br><button onclick=\"openSetup(1)\">Set up</button>";
@@ -1419,24 +1629,33 @@ window.onEngine = (e) => {
     }
     case "notice": toast(e.message); break;
     case "error": toast(e.message, true); break;
+    case "recent": recentList = e.recent || []; if ($("lecMenu").classList.contains("open")) fillLecMenu(); break;
+    case "renamed": {
+      const here = curPath === e.from;
+      if (e.error) {
+        toast(e.error, true);
+        if (here && renameSent != null && renameOld == null) { $("title").value = renameSent; fitTitle(); }
+        renameSent = null; break;
+      }
+      renameSent = null; recentList = e.recent || recentList;
+      if (!here) break;
+      curPath = e.path; // same lecture, same lines: only its paths change
+      if (renameOld == null) { $("title").value = e.title === "Lecture" ? "" : e.title; fitTitle(); }
+      showFile(e.path, "Renamed");
+      if (check?.path === e.from) check.path = e.path;
+      Docs.moved(e.from, e.path);
+      send("slidesState", { path: e.path }); // no toast: the header shows the new name
+      break;
+    }
     case "autosaved": {
       setCurPath(e.path);
-      const name = e.path.split("/").pop();
-      const s = $("saved");
-      s.innerHTML = " · <span style='color:var(--success)'>●</span> Autosaved " +
-        new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " to <a id='openT'></a>";
-      $("openT").textContent = name;
-      $("openT").onclick = () => send("reveal", { path: e.path });
+      showFile(e.path, "Autosaved " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
       break;
     }
     case "saved": {
       setCurPath(e.transcript);
-      const name = e.transcript.split("/").pop();
-      const s = $("saved"); s.innerHTML = " · <span style='color:var(--success)'>●</span> Saved <a id='openT'></a> · <a id='revealT'>Show in Finder</a>";
-      $("openT").textContent = name;
-      $("openT").onclick = () => send("open", { path: e.transcript });
-      $("revealT").onclick = () => send("reveal", { path: e.transcript });
-      toast("Transcript saved: " + name);
+      showFile(e.transcript, "Saved");
+      toast("Transcript saved: " + e.transcript.split("/").pop());
       break;
     }
     case "lineEdited": {
@@ -1466,8 +1685,7 @@ window.onEngine = (e) => {
       for (const [t, text] of e.lines) addSeg(t, text, true);
       if (!e.lines.length) $("empty").style.display = "";
       $("scroller").scrollTop = 0; follow = false;
-      const s = $("saved"); s.innerHTML = " · <a id='openT'></a>"; $("openT").textContent = e.path.split("/").pop();
-      $("openT").onclick = () => send("reveal", { path: e.path });
+      showFile(e.path);
       curPath = null; setCurPath(e.path); markFixes();
       break;
     }
@@ -1517,7 +1735,7 @@ setInterval(() => {
 }, 250);
 
 $("startBtn").onclick = () => {
-  clearTranscript(); $("saved").innerHTML = "";
+  clearTranscript(); showFile(null);
   elapsed = 0; runStart = null; follow = true;
   $("empty").style.display = "none";
   setCurPath(null);
@@ -1529,7 +1747,7 @@ $("contBtn").onclick = async () => {
   const name = curPath.split("/").pop().replace(/\.md$/, "");
   if (!await ask(`Continue recording into "${name}"? New lines are added after ${fmt(segs[segs.length - 1].t)}, and its slides pick up from there.`, "Continue recording")) return;
   elapsed = segs[segs.length - 1].t; runStart = null; follow = true;
-  $("empty").style.display = "none"; $("saved").innerHTML = "";
+  $("empty").style.display = "none"; showFile(null);
   const m = curModel();
   send("start", { model: m.path, modelLabel: m.label, device: $("device").value, language: $("lang").value,
     title: $("title").value, saveAudio: $("saveAudio").checked, course: $("course").value, continue: curPath });
@@ -1542,11 +1760,10 @@ $("folderBtn").onclick = () => send("openFolder");
 function fitTitle() {
   const t = $("title"), c = fitTitle.c || (fitTitle.c = document.createElement("canvas").getContext("2d"));
   c.font = getComputedStyle(t).font;
-  t.style.width = Math.ceil(c.measureText(t.value || t.placeholder).width + 16) + "px";
+  t.style.width = Math.ceil(c.measureText(t.value || t.placeholder).width + (t.readOnly ? 4 : 16)) + "px";
 }
 $("title").addEventListener("input", fitTitle);
 fitTitle();
-$("recent").onchange = () => { const p = $("recent").value; $("recent").value = ""; if (p) send("loadTranscript", { path: p }); };
 $("model").onchange = () => { persist(); modelReady = false; render(); send("preload", { model: $("model").value }); };
 for (const id of ["device", "lang", "saveAudio"]) $(id).onchange = () => { persist(); render(); };
 /* ---------- first-run setup ---------- */
@@ -1624,7 +1841,7 @@ function renderSetup() {
         <label>Course <input id="suCourse" class="field-in" placeholder="e.g. Computer Networks" spellcheck="false"></label>
         <label>Lecture language <select id="suLang"></select></label>
         <label>Slide language <select id="suSlideLang"></select></label>
-        <label>Theme <select id="suTheme"></select></label></div>
+        <label>Slide theme <select id="suTheme"></select></label></div>
       <p>You can change these later in Settings.</p>`;
     $("suCourse").value = $("course").value;
     $("suCourse").oninput = () => { $("course").value = $("suCourse").value; };
@@ -1725,6 +1942,8 @@ document.addEventListener("keydown", (ev) => {
     ev.preventDefault();
     if (ev.shiftKey) return cmpMode === "next" ? sendComposer() : makeSlides("next");
     if (state === "idle") $("startBtn").click(); else $("stopBtn").click();
+  } else if (ev.metaKey && ev.key === "o" && !$("setup").classList.contains("on")) {
+    ev.preventDefault(); if (!$("lecMenu").classList.contains("open")) openLecMenu();
   } else if (ev.metaKey && ev.key === ",") { ev.preventDefault(); if (!$("setup").classList.contains("on")) $("setBtn").click(); }
   else if (ev.key === "Escape" && !$("setup").classList.contains("on")) {
     if (document.querySelector(".pop.open")) closePops();

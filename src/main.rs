@@ -11,13 +11,14 @@ use tao::{
 };
 use wry::WebViewBuilder;
 
-/// The window's page: ui.html with the slide theme and renderer inlined. The chosen custom theme
+/// The window's page: ui.html with its design tokens (app.css), the slide theme and renderer inlined. The chosen custom theme
 /// is applied by the page itself (`init` carries its CSS), so it can change without a reload.
 fn ui() -> String {
     include_str!("ui.html")
         .replace("/*BUNDLE_CSS*/", theme::BASE_CSS)
         .replace("/*TOKENS_CSS*/", theme::DEFAULT_CSS)
         .replace("/*SLIDES_CSS*/", slides::SLIDES_CSS)
+        .replace("/*APP_CSS*/", include_str!("app.css"))
         .replace("/*SLIDES_JS*/", slides::SLIDES_JS)
         .replace("/*DOCS_JS*/", include_str!("docs.js"))
         .replace("/*KATEX_CSS*/", slides::KATEX_CSS)
@@ -327,6 +328,36 @@ fn main() {
                 "lineEdit" => {
                     let i = msg["i"].as_u64().unwrap_or(u64::MAX) as usize;
                     let _ = tx.send(Cmd::EditLine { path: PathBuf::from(s("path")), op: s("op"), i, text: s("text") });
+                }
+                // The lecture picker asks again each time it opens, so new lectures show up.
+                "recentList" => {
+                    let _ = ipc_proxy.send_event(json!({ "type": "recent", "recent": slides::recent(&out_dir()) }).to_string());
+                }
+                // Rename: not while Claude is writing the lecture's slides, check or notes (they'd
+                // be written under the old name); the engine refuses while recording.
+                "renameLecture" => {
+                    use std::sync::atomic::Ordering;
+                    let from = s("path");
+                    let busy = [&SLIDES_BUSY, &CHECK_BUSY, &DRAFT_BUSY].iter().any(|b| b.load(Ordering::SeqCst));
+                    let reply = move |r: Result<PathBuf, String>, proxy: &tao::event_loop::EventLoopProxy<String>| {
+                        let ev = match r {
+                            Ok(p) => slides::transcript_payload(&p).map(|mut v| {
+                                v["type"] = json!("renamed");
+                                v["from"] = json!(from);
+                                v["recent"] = json!(slides::recent(&out_dir()));
+                                v
+                            }),
+                            Err(e) => Err(e),
+                        };
+                        let ev = ev.unwrap_or_else(|e| json!({ "type": "renamed", "from": from, "error": e }));
+                        let _ = proxy.send_event(ev.to_string());
+                    };
+                    if busy {
+                        reply(Err("Wait for Claude to finish before renaming the lecture.".into()), &ipc_proxy);
+                    } else {
+                        let proxy = ipc_proxy.clone();
+                        let _ = tx.send(Cmd::Rename { path: PathBuf::from(s("path")), title: s("title"), done: Box::new(move |r| reply(r, &proxy)) });
+                    }
                 }
                 "loadTranscript" => {
                     let ev = slides::transcript_payload(&PathBuf::from(s("path")))

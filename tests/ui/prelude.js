@@ -13,6 +13,14 @@
     [49, "Mini-batches are the compromise everyone uses in practice."],
     [58, "Next week there's the lab on this, bring your laptops."],
   ];
+  // Past lectures in the transcripts folder, newest first, as slides::recent lists them.
+  const RECENT = [
+    { name: "2026-11-17 10.02 Test Lecture", path: PATH },
+    { name: "2026-11-10 10.00 Backpropagation", path: "/tmp/lecture-scribe-ui-test/2026-11-10 10.00 Backpropagation.md" },
+    { name: "2026-11-03 10.01 Gradient descent, part 1", path: "/tmp/lecture-scribe-ui-test/2026-11-03 10.01 Gradient descent, part 1.md" },
+    { name: "2026-10-27 09.58 Linear regression", path: "/tmp/lecture-scribe-ui-test/2026-10-27 09.58 Linear regression.md" },
+    { name: "2025-06-12 14.30 Networks – DHCP", path: "/tmp/lecture-scribe-ui-test/2025-06-12 14.30 Networks – DHCP.md" },
+  ];
   const sent = [], errors = [];
   // The lecture's docs, as docs.rs keeps them: path → {md, t (creation order)}.
   const DOCDIR = PATH.replace(/\.md$/, " · Docs");
@@ -22,7 +30,7 @@
   const freeDoc = (name) => { for (let n = 1; ; n++) { const p = `${DOCDIR}/${name}${n > 1 ? " " + n : ""}.md`; if (!docs[p]) return p; } };
   let lines = LINES.map((l) => [...l]);
   const fire = (e) => setTimeout(() => window.onEngine(e), 0);
-  const slidesState = () => ({ type: "slides", path: PATH, title: "Test Lecture", lines: lines.length, done: 0, slides: [], lang: "en", usage: null, flagged: 0, lookups: [] });
+  const slidesState = (path = PATH) => ({ type: "slides", path, title: "Test Lecture", lines: lines.length, done: 0, slides: [], lang: "en", usage: null, flagged: 0, lookups: [] });
 
   addEventListener("error", (e) => errors.push(e.message));
   addEventListener("unhandledrejection", (e) => errors.push(String(e.reason)));
@@ -37,10 +45,20 @@
       case "ready":
         fire({ type: "init", models: [{ label: "Parakeet V3 0.6B", langs: "multi", path: "/m/parakeet.gguf" }], modelBytes: 0,
           devices: ["Test Microphone"], defaultDevice: "Test Microphone", themeCss: "", themes: [],
-          settings: { onboarded: true, model: "/m/parakeet.gguf", course: "Machine Learning" }, outDir: "/tmp/lecture-scribe-ui-test", recent: [] });
+          settings: { onboarded: true, model: "/m/parakeet.gguf", course: "Machine Learning" }, outDir: "/tmp/lecture-scribe-ui-test", recent: RECENT });
         break;
+      case "recentList": fire({ type: "recent", recent: RECENT }); break;
       case "preload": fire({ type: "modelReady", path: m.model, ms: 1 }); break;
-      case "slidesState": fire(slidesState()); break;
+      case "slidesState": fire(slidesState(m.path)); break;
+      // What engine::rename_lecture does: the files move, docs included (a title "Fail" fails).
+      case "renameLecture": {
+        if (m.title === "Fail") { fire({ type: "renamed", from: m.path, error: "Couldn't rename Test Lecture.wav: Permission denied" }); break; }
+        const to = m.path.replace(/[^/]*$/, m.title + ".md"), a = m.path.replace(/\.md$/, " · Docs/"), b = to.replace(/\.md$/, " · Docs/");
+        for (const k of Object.keys(docs)) if (k.startsWith(a)) { docs[b + k.slice(a.length)] = docs[k]; delete docs[k]; }
+        for (const x of RECENT) if (x.path === m.path) Object.assign(x, { name: "2026-11-17 10.02 " + m.title, path: to });
+        fire({ type: "renamed", from: m.path, path: to, title: m.title, lines: lines.map((l) => [...l]), recent: RECENT });
+        break;
+      }
       case "docsList": fire({ type: "docs", path: m.path, docs: docList(), open: null }); break;
       case "docRead": fire({ type: "doc", path: m.path, doc: m.doc, name: m.doc.split("/").pop().replace(/\.md$/, ""), md: docs[m.doc].md, images: docs[m.doc].images || {} }); break;
       case "docSave": docs[m.doc].md = m.md; fire({ type: "docSaved", path: m.path, doc: m.doc, seq: m.seq }); break;
@@ -74,7 +92,7 @@
   const tests = [];
 
   window.T = {
-    PATH, LINES,
+    PATH, LINES, RECENT,
     test: (name, fn) => tests.push({ name, fn }),
     sent: (cmd) => sent.filter((m) => !cmd || m.cmd === cmd),
     clearSent: () => { sent.length = 0; },

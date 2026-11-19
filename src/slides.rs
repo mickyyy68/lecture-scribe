@@ -398,7 +398,7 @@ fn normalize(slides: &mut [Value]) {
 fn sample_excerpt(dir: &Path, builtin: bool) -> (String, Vec<(String, String)>) {
     let secs = |t: &str| t.split(':').fold(0u64, |a, x| a * 60 + x.parse::<u64>().unwrap_or(0));
     if !builtin {
-        for r in recent(dir) {
+        for r in recent(dir).into_iter().take(30) {
             let p = PathBuf::from(r["path"].as_str().unwrap_or(""));
             let Ok((_, lines)) = read_transcript(&p) else { continue };
             if lines.len() < 30 {
@@ -946,7 +946,7 @@ fn edit1(a: &str, b: &str) -> bool {
     diff + (l.len() - j) + (s.len() - i) <= 1
 }
 
-/// Recent transcripts, newest first.
+/// Recent transcripts, newest first (enough for the lecture picker's search to find old ones).
 pub fn recent(dir: &Path) -> Vec<Value> {
     let mut v: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(dir)
         .into_iter()
@@ -961,7 +961,7 @@ pub fn recent(dir: &Path) -> Vec<Value> {
         .collect();
     v.sort_by(|a, b| b.0.cmp(&a.0));
     v.into_iter()
-        .take(30)
+        .take(1000)
         .map(|(_, p)| json!({ "name": p.file_stem().unwrap_or_default().to_string_lossy(), "path": p.to_string_lossy() }))
         .collect()
 }
