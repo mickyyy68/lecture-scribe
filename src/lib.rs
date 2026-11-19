@@ -1,5 +1,5 @@
 pub mod audio;
-pub mod check;
+pub mod clean;
 pub mod docs;
 pub mod engine;
 pub mod glossary;
@@ -7,4 +7,6 @@ pub mod material;
 pub mod models;
 pub mod paths;
 pub mod slides;
+pub mod spell;
 pub mod theme;
+pub mod versions;

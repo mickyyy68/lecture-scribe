@@ -20,5 +20,5 @@ tao = "0.37.2"
 transcribe-cpp = "0.4.2"
 wry = "0.57.2"
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSURL"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSURL", "NSRange"] }
 muda = { version = "0.21.2", default-features = false }

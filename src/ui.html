@@ -107,7 +107,7 @@
 
   #split { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--left, 44%) 6px 1fr; }
   #left { position: relative; min-width: 0; min-height: 0; display: flex; }
-  #scroller { flex: 1; overflow-y: auto; -webkit-user-select: text; }
+  #scroller { position: relative; flex: 1; overflow-y: auto; -webkit-user-select: text; }
   #doc { max-width: 820px; margin: 0 auto; padding: 24px 24px 120px; font-size: var(--fs, 17px); line-height: 1.65; }
   .seg { display: grid; grid-template-columns: 66px 1fr; gap: 12px; margin: 0 0 .55em; }
   .ts { font: 12px var(--app-mono); color: var(--app-fg3); padding-top: .45em; text-align: right; cursor: default; }
@@ -135,6 +135,43 @@
   .empty b { color: var(--app-fg); }
   #jump { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: none;
     background: var(--app-raised); color: var(--app-fg); border: none; border-radius: var(--app-r-pill); padding: 5px 14px; box-shadow: var(--app-sh2); }
+  #left.vbar #jump { bottom: 72px; }
+  /* Versions: the bar at the bottom of the transcript (see "versions" in the script). */
+  #verBar, #verProg { display: none; }
+  #left.vbar:not(.cleaning) #verBar { display: flex; }
+  #left.vbar.cleaning #verProg { display: flex; padding: 4px 4px 4px 12px; overflow: hidden; }
+  #verBtn .sub { color: var(--app-fg3); font-size: 12px; margin-left: -3px; }
+  #verName { max-width: 220px; }
+  #cmpBtn.on { background: var(--app-sunken); box-shadow: inset 0 0 0 1px var(--app-line); }
+  #verProg .claude-mark { margin-right: 8px; }
+  #verProgTime { margin: 0 10px; color: var(--app-fg3); font-variant-numeric: tabular-nums; }
+  #verMenu { width: 420px; }
+  #verMenu .k { font-weight: 400; }
+  #verMenu .ok { display: inline-flex; width: 17px; color: var(--app-accent); }
+  /* Compare: the shown version against the original, word by word. */
+  #cmpView { display: none; }
+  #doc.comparing #segs { display: none; }
+  #doc.comparing #cmpView { display: block; }
+  .cmp-note { margin: 0 0 18px 78px; font-size: 12.5px; line-height: 1.5; color: var(--app-fg3); }
+  .cmp-note b { color: var(--app-fg2); font-weight: 500; }
+  #cmpView .seg.gone .txt { color: var(--app-fg3); text-decoration: line-through; text-decoration-color: var(--app-danger); }
+  #cmpView del { color: var(--app-danger); text-decoration: line-through; }
+  #cmpView ins { text-decoration: none; background: var(--app-ok-soft); border-radius: 3px; padding: 0 1px; }
+  /* Find (⌘F): a bar over the pane, and boxes drawn over the matches in a layer of its scroll box. */
+  .findbar { position: absolute; top: 12px; right: 18px; z-index: 7; display: none; align-items: center; gap: 2px; padding: 4px 4px 4px 10px;
+    background: var(--app-raised); color: var(--app-fg); border: 1px solid var(--app-line); border-radius: var(--app-r-md); box-shadow: var(--app-sh2); font-size: var(--app-text-sm); }
+  .findbar.on { display: flex; }
+  #scroller.finding, #docScroll.finding { padding-top: 48px; }
+  .findbar .ic { width: 15px; height: 15px; color: var(--app-fg3); }
+  .findbar input { width: 180px; border: none; outline: none; background: transparent; color: inherit; font: inherit; padding: 4px 4px; -webkit-user-select: text; }
+  .findbar .n { min-width: 56px; margin-right: 4px; text-align: right; color: var(--app-fg3); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .findbar button { border: none; background: transparent; border-radius: var(--app-r-sm); padding: 3px 5px; color: var(--app-fg2); display: inline-flex; }
+  .findbar button:hover { background: var(--app-hover); color: var(--app-fg); }
+  .findbar button .ic { color: inherit; }
+  .find-layer { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: 3; }
+  .find-layer i { position: absolute; border-radius: 3px; background: var(--app-find); mix-blend-mode: multiply; }
+  .find-layer i.cur { background: var(--app-find-cur); }
+  [data-theme="dark"] .find-layer i { mix-blend-mode: screen; }
   #divider { cursor: col-resize; background: transparent; }
   #divider:hover, #divider.drag { background: linear-gradient(var(--app-line-strong), var(--app-line-strong)) center / 2px 100% no-repeat; }
 
@@ -163,7 +200,7 @@
   .cd-empty h2 { margin: 12px 0 6px; font: 700 20px/1.3 var(--app-font); color: var(--app-fg); }
   .cd-empty b { color: var(--app-fg); }
   .cd-empty svg { width: 40px; height: 40px; stroke-width: 1.2; color: var(--app-fg3); }
-  #docsView { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  #docsView { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
   #docSavedTxt { font-size: 12px; color: var(--app-fg3); }
 
   svg.ic { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
@@ -284,27 +321,23 @@
   .g-terms { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }
   .g-term { display: inline-flex; align-items: center; gap: 2px; font: 13px var(--app-mono); background: var(--app-sunken); color: var(--app-fg2); padding: 2px 4px 2px 10px; border-radius: var(--app-r-pill); box-shadow: inset 0 0 0 1px var(--app-line); }
   .g-sec { margin-bottom: 26px; }
-  /* Check transcript: proposed fixes to review */
-  .ck-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-  .ck-head .ck-n { font-size: 13px; color: var(--app-fg2); margin-right: auto; }
-  .ck-fix { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 9px 0; border-top: 1px solid var(--app-line); font-size: 14px; line-height: 21px; }
-  .ck-fix a { font: 12px/21px var(--app-mono); color: var(--app-fg3); cursor: pointer; }
-  .ck-fix a:hover { color: var(--app-fg); }
-  .ck-fix .why { display: block; font-size: 12px; color: var(--app-fg2); }
-  .ck-fix del { color: var(--app-danger); text-decoration: line-through; }
-  .ck-fix ins { text-decoration: none; background: var(--app-ok-soft); border-radius: 3px; }
-  .ck-fix .ck-act { display: flex; gap: 6px; }
-  .ck-fix .ck-act button { padding: 1px 10px; font-size: var(--app-text-sm); }
-  .ck-fix.done { opacity: .55; }
-  .ck-fix .ck-st { font-size: 12px; color: var(--app-fg2); white-space: nowrap; }
-  .seg.has-fix .txt { text-decoration: underline wavy var(--app-accent); text-decoration-thickness: 1px; text-underline-offset: 4px; }
+  /* Suggested glossary corrections from a clean up, to review */
+  .sg-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .sg-head .sg-n { font-size: 13px; color: var(--app-fg2); margin-right: auto; }
+  .sg-row { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--app-line); font-size: 14px; line-height: 21px; }
+  .sg-row > span:first-child { flex: 1; min-width: 0; }
+  .sg-row del { color: var(--app-danger); text-decoration: line-through; }
+  .sg-row .sg-act { display: flex; gap: 6px; }
+  .sg-row .sg-act button { padding: 1px 10px; font-size: var(--app-text-sm); }
+  .sg-row.done { opacity: .55; }
+  .sg-row .sg-st { font-size: 12px; color: var(--app-fg2); white-space: nowrap; }
   .m-row { grid-template-columns: minmax(0, 1fr) auto 28px; font-size: 13.5px; }
   .m-row .pg { color: var(--app-fg2); }
   #matAdd { margin-top: 12px; }
 
   /* Docs tab: the editor (docs.js), in the window's type: bold sans headings, quiet ink. */
-  #docsView { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-  #docScroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-user-select: text; }
+  #docsView { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  #docScroll { position: relative; flex: 1; min-height: 0; overflow-y: auto; -webkit-user-select: text; }
   #docPage { max-width: 760px; margin: 0 auto; padding: 26px 44px 200px; }
   #docTitle { display: block; width: 100%; border: none; background: transparent; outline: none; padding: 0; margin: 0 0 18px;
     font: 700 32px/1.2 var(--app-font); letter-spacing: -0.015em; color: var(--app-fg); -webkit-user-select: text; }
@@ -399,6 +432,8 @@
   #ask.on { display: flex; }
   #ask > div { max-width: 440px; margin: 20px; padding: 18px 18px 14px; background: var(--app-raised); color: var(--app-fg); border-radius: var(--app-r-lg); box-shadow: var(--app-sh3); }
   #askMsg { font: 500 14px/21px var(--app-font); margin: 0 0 16px; padding: 0 2px; }
+  #askIn { display: none; width: 100%; margin: -6px 0 16px; }
+  #ask.text #askIn { display: block; }
   #ask .row { display: flex; justify-content: flex-end; gap: 8px; }
   .su { max-width: 620px; margin: 0 auto; padding: 56px 32px 40px; display: flex; flex-direction: column; min-height: 100%; box-sizing: border-box; }
   .su-steps { display: flex; gap: 6px; }
@@ -455,6 +490,8 @@
 <symbol id="i-slides" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></symbol>
 <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></symbol>
 <symbol id="i-chev" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
+<symbol id="i-chevup" viewBox="0 0 24 24"><path d="M7 14l5-5 5 5"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></symbol>
 <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
 <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></symbol>
 <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
@@ -517,10 +554,23 @@
           It saves itself as you go to <b id="outDir">Documents/Lecture Transcripts</b>.
         </div>
         <div id="segs"></div>
+        <div id="cmpView"></div>
         <div class="seg" id="partial" style="display:none"><div class="ts"><span class="dot"></span></div><div class="txt"></div></div>
       </div>
     </main>
     <button id="jump">↓ Jump to live</button>
+    <div id="verBar" class="capsule">
+      <button id="verBtn" class="cs" title="Versions of the transcript: the original, and the clean versions Claude made"><svg class="ic"><use href="#i-doc"/></svg><span id="verName">Original</span><span id="verSub" class="sub"></span><svg class="ic sm"><use href="#i-chev"/></svg></button>
+      <i class="cap-sep"></i>
+      <button id="cmpBtn" class="cs" title="Show what the clean up changed, against the original">Compare</button>
+      <button id="cleanBtn" class="cs pri"><span class="claude-mark">/*CLAUDE_SVG*/</span>Clean up<small id="cleanNew"></small></button>
+    </div>
+    <div id="verProg" class="capsule">
+      <span class="claude-mark">/*CLAUDE_SVG*/</span><span id="verProgTxt"></span><span id="verProgTime"></span>
+      <button id="verStop" class="cs soft" title="Stop Claude: nothing is saved"><svg class="ic"><use href="#i-stop"/></svg>Stop</button>
+      <i class="cap-run"></i>
+    </div>
+    <div id="verMenu" class="pop"></div>
   </div>
   <div id="divider" title="Drag to resize"></div>
   <aside id="right">
@@ -581,7 +631,6 @@
           <button id="reviewBtn" title="Questions with hidden answers for the whole lecture, added at the end of the deck. Making them again replaces the old ones"><svg class="ic"><use href="#i-cards"/></svg>Review cards…</button>
           <button id="undoBtn" title="Remove the slides from the last click"><svg class="ic"><use href="#i-undo"/></svg>Undo last</button>
         </div>
-        <button id="checkBtn" title="Claude reads the transcript and proposes fixes for misheard words. You review them in the Glossary"><svg class="ic"><use href="#i-check"/></svg>Check transcript</button>
         <hr>
         <button id="glossBtn" title="Course PDFs and the words Claude taught the transcriber"><svg class="ic"><use href="#i-book"/></svg>Glossary<span class="k" id="glossK"></span></button>
         <button id="setBtn" title="Claude, language, theme and setup"><svg class="ic"><use href="#i-gear"/></svg>Settings<span class="k">⌘,</span></button>
@@ -601,7 +650,7 @@
           <h4 class="gl"><span class="claude-mark">/*CLAUDE_SVG*/</span>Claude</h4>
           <div class="grp">
             <label class="gr">Model<span class="spacer"></span>
-              <select id="aiModel" title="Claude model for slides, docs and checks">
+              <select id="aiModel" title="Claude model for slides, docs and clean ups">
                 <option value="sonnet">Sonnet</option>
                 <option value="opus">Opus</option>
                 <option value="fable">Fable</option>
@@ -616,7 +665,7 @@
               </select></label>
             <label class="gr">Language of slides and notes<span class="spacer"></span><select id="slideLang" title="The language of slides, notes and review cards. The transcript stays in the language spoken"><option value="">Same as the lecture</option></select></label>
           </div>
-          <p class="gh">On your Claude subscription, for slides, docs, review cards and checks. Rebuild deck, Review cards, Draft notes and Check transcript always use at least High.</p>
+          <p class="gh">On your Claude subscription, for slides, docs, review cards and clean ups. Rebuild deck, Review cards, Draft notes and Clean up always use at least High.</p>
           <h4 class="gl">Look</h4>
           <div class="grp">
             <label class="gr">Slide theme<span class="spacer"></span><button id="themeDel" class="lnk">Delete</button><select id="themeSel"><option value="">Default</option></select></label>
@@ -648,7 +697,8 @@
 <div id="dtool" class="float"><button data-f="bold" title="Bold (⌘B)">B</button><button data-f="italic" title="Italic (⌘I)" style="font-style:italic">I</button><button data-f="strike" title="Strikethrough (⇧⌘X)" style="text-decoration:line-through">S</button><button data-f="code" title="Code (⌘E)" style="font-family:var(--app-mono)">{ }</button><i></i><button data-f="link" title="Link (⌘K)">Link</button></div>
 <div id="dslash" class="float"></div>
 <div id="dpop" class="float"></div>
-<div id="ask"><div><p id="askMsg"></p><div class="row"><button id="askNo">Cancel</button><button id="askYes" class="go">OK</button></div></div></div>
+<div id="findBar" class="findbar" role="search"><svg class="ic"><use href="#i-search"/></svg><input id="findIn" placeholder="Find" spellcheck="false" autocomplete="off"><span class="n" id="findN"></span><button id="findPrev" title="Previous (⇧⌘G)"><svg class="ic"><use href="#i-chevup"/></svg></button><button id="findNext" title="Next (⌘G)"><svg class="ic"><use href="#i-chev"/></svg></button><button id="findClose" title="Close (esc)"><svg class="ic"><use href="#i-x"/></svg></button></div>
+<div id="ask"><div><p id="askMsg"></p><input id="askIn" class="field-in" spellcheck="false" autocomplete="off"><div class="row"><button id="askNo">Cancel</button><button id="askYes" class="go">OK</button></div></div></div>
 <div id="setup"><div class="su">
   <div class="su-steps" id="suSteps"></div>
   <div id="suBody"></div>
@@ -849,8 +899,9 @@ function segRow(t, text) {
 // edited, so dragging across lines still selects text to copy. Each change is saved to the
 // lecture file when the line loses focus (lineEdit), applied here first so typing never waits
 // for the reply. Works while recording too (the engine applies it to the lecture it holds); off
-// while making slides, which works by line number.
-function canEdit() { return !!curPath && !slidesBusy; }
+// while making slides or cleaning up, which work by line number, and while comparing versions.
+// Lines live in the version shown or, past its end, in the original (versions::route).
+function canEdit() { return !!curPath && !slidesBusy && !cleaning && !comparing; }
 function renderEditable() {
   const on = canEdit();
   if ($("doc").classList.contains("can-edit") === on) return;
@@ -956,11 +1007,11 @@ function pending() { return deck ? Math.max(segs.length, deck.lines || 0) - (dec
 function renderSlidesBar() {
   renderEditable();
   if (typeof Docs !== "undefined") Docs.bar();
-  $("checkBtn").disabled = !curPath || !segs.length || !!(ckHere() && check.busy);
+  renderVersions();
   const p = pending(), n = deck?.slides?.length || 0;
-  $("slidesBtn").disabled = !curPath || slidesBusy || p <= 0;
+  $("slidesBtn").disabled = !curPath || slidesBusy || !!cleaning || p <= 0;
   $("undoBtn").disabled = !curPath || slidesBusy || !n;
-  $("rebuildBtn").disabled = $("reviewBtn").disabled = !curPath || slidesBusy || Math.max(segs.length, deck?.lines || 0) === 0;
+  $("rebuildBtn").disabled = $("reviewBtn").disabled = !curPath || slidesBusy || !!cleaning || Math.max(segs.length, deck?.lines || 0) === 0;
   $("presentBtn").disabled = !n;
   $("slideMenuBtn").disabled = !curPath;
   $("slideCount").textContent = n ? `${n} ${n === 1 ? "slide" : "slides"}` : "No slides";
@@ -1033,16 +1084,20 @@ function makeSlides(mode, hint = "") {
   send("slides", { path: curPath, course: $("course").value, mode, model: $("aiModel").value, effort: $("effort").value, lang: slideLangCode(), hint });
 }
 // The webview has no native confirm() (it always returns false), so ask in the page.
-function ask(msg, yes = "OK") {
+// With `text`, it asks for a line of text instead (null when cancelled).
+function ask(msg, yes = "OK", text = null) {
   return new Promise(res => {
-    $("askMsg").textContent = msg; $("askYes").textContent = yes; $("ask").classList.add("on"); $("askYes").focus();
-    const done = v => { $("ask").classList.remove("on"); document.removeEventListener("keydown", key, true); res(v); };
+    const field = text != null;
+    $("askMsg").textContent = msg; $("askYes").textContent = yes; $("ask").classList.toggle("text", field); $("ask").classList.add("on");
+    if (field) { $("askIn").value = text; $("askIn").focus(); $("askIn").select(); } else $("askYes").focus();
+    const done = v => { $("ask").classList.remove("on"); document.removeEventListener("keydown", key, true); res(field ? (v ? $("askIn").value : null) : v); };
     const key = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(false); } else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); done(true); } };
     document.addEventListener("keydown", key, true);
     $("askYes").onclick = () => done(true); $("askNo").onclick = () => done(false);
     $("ask").onclick = e => { if (e.target === $("ask")) done(false); };
   });
 }
+const askText = (msg, value, yes = "OK") => ask(msg, yes, value);
 $("rebuildBtn").onclick = () => openComposer("rebuild");
 $("reviewBtn").onclick = () => openComposer("review");
 $("slidesBtn").onclick = () => openComposer("next");
@@ -1056,10 +1111,10 @@ $("course").onchange = () => { persist(); renderedCount = -1; renderSlides(); lo
 function loadGloss() { send("glossary", { course: $("course").value }); send("material", { course: $("course").value }); }
 function renderGloss() {
   const n = gloss.corrections.length;
-  showPanels();
+  showPanels(); Find.refresh(); // the doc it searched may be hidden now
   if (!glossOpen) return;
   const v = $("glossBody"), course = $("course").value.trim() || "this course";
-  v.innerHTML = checkSection() +
+  v.innerHTML = suggestSection() +
     `<div class="g-sec"><h3>Course material · ${mat.length}</h3><p class="hint" id="matHint"></p>` +
     mat.map((f, i) => `<div class="g-row m-row"><span class="c"></span><span class="pg">${f.pages} pages${f.emptyPages ? ` (${f.emptyPages} without text)` : ""}</span><button class="g-x" data-k="material" data-i="${i}" title="Remove">×</button></div>`).join("") +
     `<button id="matAdd" ${matBusy ? "disabled" : ""}>${matBusy ? "Reading PDF…" : "Add PDF…"}</button></div>` +
@@ -1073,22 +1128,122 @@ function renderGloss() {
   $("corrHint").textContent = `Misheard words that Transcribe Lecture fixes live while transcribing ${course}, from the next sentence on. Remove any that are wrong.`;
   v.querySelectorAll(".g-row").forEach((r, i) => { r.querySelector(".h").textContent = gloss.corrections[i].heard; r.querySelector(".c").textContent = gloss.corrections[i].correct; });
   v.querySelectorAll(".g-term > span").forEach((el, i) => { el.textContent = gloss.terms[i]; });
-  fillCheck(v);
+  fillSuggest(v);
 }
 
-/* ---------- check transcript ---------- */
-// Claude proofreads the lecture (checkTranscript) and proposes fixed lines and new glossary
-// corrections. Nothing changes until the student accepts: a fix is saved like a hand edit
-// (lineEdit, so it works while recording), a correction goes to the glossary (glossaryAdd).
-// Each fix carries the line's old text; if the line changed since, it isn't applied.
-let check = null; // {path, busy, error, fixes: [{i, t, old, text, why, st}], corrections: [{heard, correct, st}]}
-const ckHere = () => check && check.path === curPath;
-function startCheck() {
-  if (!curPath || check?.busy) return;
-  check = { path: curPath, busy: true };
-  glossOpen = true; setOpen = false; jobStart.check = Date.now(); closePops(); renderGloss(); markFixes(); renderSlidesBar();
-  send("checkTranscript", { path: curPath, course: $("course").value, model: $("aiModel").value, effort: $("effort").value });
+/* ---------- suggested corrections ---------- */
+// A clean up also proposes glossary corrections: forms the transcriber keeps mishearing. They
+// wait in the Glossary until the student accepts them (glossaryAdd) or skips them.
+let suggest = null; // {path, corrections: [{heard, correct, st}]}
+const sgHere = () => !!suggest && suggest.path === curPath && suggest.corrections.length > 0;
+const sgOpen = () => sgHere() ? suggest.corrections.filter((c) => c.st === "open").length : 0;
+function suggestSection() {
+  if (!sgHere()) return "";
+  const open = sgOpen(), n = suggest.corrections.length;
+  const head = open ? `<span class="sg-n">${open} to review</span><button id="sgAll" class="go">Accept all</button><button id="sgNone">Skip all</button>`
+    : `<span class="sg-n">Reviewed: ${suggest.corrections.filter((c) => c.st === "accepted").length} of ${n} added.</span>`;
+  const act = (i, st) => st === "open" ? `<span class="sg-act"><button data-sg="${i}" data-do="accept">Accept</button><button data-sg="${i}" data-do="skip">Skip</button></span>`
+    : `<span class="sg-st">${st === "accepted" ? "Added" : "Skipped"}</span>`;
+  return `<div class="g-sec" id="sgSec"><h3>Suggested corrections</h3><p class="hint">From the last clean up: words the transcriber keeps mishearing. Accepted ones are fixed live in this course's next lectures.</p><div class="sg-head">${head}</div>` +
+    suggest.corrections.map((c, i) => `<div class="sg-row${c.st === "open" ? "" : " done"}" data-corr="${i}"><span><del></del> → <b></b></span>${act(i, c.st)}</div>`).join("") + `</div>`;
 }
+function fillSuggest(v) {
+  if (!sgHere()) return;
+  v.querySelectorAll("[data-corr]").forEach((el, i) => { el.querySelector("del").textContent = suggest.corrections[i].heard; el.querySelector("b").textContent = suggest.corrections[i].correct; });
+}
+function decide(i, accept) {
+  const c = suggest.corrections[i]; if (c.st !== "open") return;
+  c.st = accept ? "accepted" : "skipped";
+  if (accept) send("glossaryAdd", { course: $("course").value, corrections: [{ heard: c.heard, correct: c.correct }] });
+}
+$("glossView").addEventListener("click", (e) => {
+  if (e.target.id === "sgAll" || e.target.id === "sgNone") { suggest.corrections.forEach((_, i) => decide(i, e.target.id === "sgAll")); return renderGloss(); }
+  const b = e.target.closest("[data-sg]"); if (b) { decide(+b.dataset.sg, b.dataset.do === "accept"); renderGloss(); }
+});
+
+/* ---------- versions ---------- */
+// The original transcript and the clean versions Claude made of it (versions.rs). The bar at the
+// bottom of the transcript picks one, compares it with the original, and asks for a clean up.
+// The version picked is what the pane shows and edits, and what slides and notes are made from.
+const NO_VERSIONS = { active: null, versions: [], lines: null };
+let vers = NO_VERSIONS; // versions::info of the open lecture
+let cleaning = null; // {path, done, total, stopping} while Claude cleans up a lecture
+let comparing = false;
+const cleanHere = () => !!cleaning && cleaning.path === curPath;
+const verOf = (id) => vers.versions.find((v) => v.id === id);
+function verDate(v) {
+  const d = new Date(v.created);
+  return isNaN(d) ? "" : `${d.getDate()} ${d.toLocaleDateString("en-GB", { month: "short" })} ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+}
+const verLabel = (v) => v ? `${v.name} · ${verDate(v)}` : "Original";
+// Lines recorded since the shown version was made: not cleaned up yet.
+const verTail = () => vers.active && vers.lines != null ? Math.max(0, segs.length - vers.lines) : 0;
+function renderVersions() {
+  $("left").classList.toggle("vbar", !!curPath && (segs.length > 0 || vers.versions.length > 0));
+  $("left").classList.toggle("cleaning", cleanHere());
+  const v = verOf(vers.active), tail = verTail();
+  setText($("verName"), v ? v.name : "Original");
+  setText($("verSub"), v ? verDate(v) : "");
+  $("cmpBtn").style.display = v ? "" : "none";
+  $("cmpBtn").classList.toggle("on", comparing);
+  $("doc").classList.toggle("comparing", comparing);
+  setText($("cleanNew"), v && tail ? `· ${tail} new ${tail === 1 ? "line" : "lines"}` : "");
+  $("cleanBtn").disabled = !curPath || !segs.length || slidesBusy || !!cleaning;
+  $("cleanBtn").title = slidesBusy ? "Wait for the slides to finish" : cleaning && !cleanHere() ? "Claude is cleaning up another lecture"
+    : v && tail ? `Clean up the ${tail} lines recorded since this version was made`
+    : "Claude rewrites the transcript into what the professor said, as a new version. The original stays";
+  if (cleanHere()) {
+    setText($("verProgTxt"), cleaning.stopping ? "Stopping…" : `${engName()} is cleaning up the transcript${cleaning.total > 1 ? ` · ${cleaning.done} of ${cleaning.total} parts` : "…"}`);
+    tickVer();
+  }
+}
+function tickVer() {
+  const s = jobStart.clean ? Math.floor((Date.now() - jobStart.clean) / 1000) : 0;
+  setText($("verProgTime"), `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
+}
+async function startClean() {
+  if ($("cleanBtn").disabled) return;
+  const v = verOf(vers.active);
+  if (v && !verTail() && !await ask(`Make a new clean version of the whole lecture from the original? “${verLabel(v)}” stays in Versions.`, "Clean up")) return;
+  closePops(); comparing = false;
+  cleaning = { path: curPath, done: 0, total: 0 }; jobStart.clean = Date.now();
+  send("cleanUp", { path: curPath, course: $("course").value, model: $("aiModel").value, effort: $("effort").value, lang: slideLangCode() });
+  render();
+}
+$("cleanBtn").onclick = startClean;
+$("verStop").onclick = () => { if (cleaning) cleaning.stopping = true; send("cancel", { kind: "clean" }); render(); };
+function fillVerMenu() {
+  const lock = slidesBusy || !!cleaning, a = verOf(vers.active), m = $("verMenu");
+  const row = (id) => `<button data-ver="${id}" ${lock && id !== (vers.active || "") ? "disabled" : ""}><span class="ok">${(vers.active || "") === id ? OK_SVG : ""}</span><span class="t"></span><span class="k"></span></button>`;
+  m.innerHTML = `<div class="lab">Versions</div>` + row("") + vers.versions.map((v) => row(v.id)).join("") +
+    (a ? `<hr><button id="verRename"><svg class="ic"><use href="#i-pen"/></svg><span class="t">Rename version…</span></button><button id="verDelete" ${lock ? "disabled" : ""}><svg class="ic"><use href="#i-trash"/></svg><span class="t">Delete version…</span></button>` : "") +
+    `<div class="note">${lock ? "Wait for Claude to finish to switch versions." : vers.versions.length ? "Slides, notes and Claude use the version you pick." : "Clean up makes a version that Claude rewrote into what the professor said. The original stays."}</div>`;
+  const rows = m.querySelectorAll("[data-ver]");
+  rows[0].querySelector(".t").textContent = "Original"; rows[0].querySelector(".k").textContent = "as transcribed";
+  vers.versions.forEach((v, i) => {
+    rows[i + 1].querySelector(".t").textContent = verLabel(v);
+    rows[i + 1].querySelector(".k").textContent = `${engName(v.model).replace(/^Claude /, "")} · ${v.changed} changed, ${v.removed} removed`;
+  });
+}
+$("verBtn").onclick = () => togglePop($("verMenu"), $("verBtn"), fillVerMenu);
+$("verMenu").onclick = async (e) => {
+  const b = e.target.closest("button"); if (!b || b.disabled) return;
+  closePops();
+  if (b.dataset.ver != null) { if (b.dataset.ver !== (vers.active || "")) send("versionSet", { path: curPath, id: b.dataset.ver }); return; }
+  const v = verOf(vers.active); if (!v) return;
+  if (b.id === "verRename") {
+    const name = (await askText("Name this version", v.name, "Rename"))?.trim();
+    if (name && name !== v.name) send("versionRename", { path: curPath, id: v.id, name });
+  } else if (b.id === "verDelete" && await ask(`Delete “${verLabel(v)}”? It goes to the Trash, and the original transcript is shown again.`, "Delete")) {
+    send("versionDelete", { path: curPath, id: v.id });
+  }
+};
+$("cmpBtn").onclick = () => {
+  comparing = !comparing; $("cmpView").innerHTML = "";
+  if (comparing) send("versionCompare", { path: curPath });
+  render(); Find.refresh();
+};
+// The shown version against the original, line by line (versions::compare).
 function wordDiff(a, b) {
   // Words of a and b with an LCS: kept ones plain, removed in <del>, added in <ins>.
   const x = a.split(" "), y = b.split(" "), n = x.length, m = y.length;
@@ -1103,68 +1258,127 @@ function wordDiff(a, b) {
   }
   return out.join(" ").replace(/<\/del> <del>/g, " ").replace(/<\/ins> <ins>/g, " ");
 }
-function checkSection() {
-  const intro = `<p class="hint">Claude reads this lecture's transcript and proposes fixes for misheard words. You review each one; nothing changes until you accept. It uses the model chosen in Settings, at least at High reasoning.</p>`;
-  if (!curPath) return `<div class="g-sec"><h3>Check transcript</h3><p class="hint">Open or record a lecture to check its transcript.</p></div>`;
-  if (!ckHere()) return `<div class="g-sec"><h3>Check transcript</h3>${intro}<button id="ckStart">Check transcript</button></div>`;
-  if (check.busy) return `<div class="g-sec"><h3>Check transcript</h3><p class="hint">${engName()} is reading the transcript… (a few minutes for a long lecture)</p><button id="ckStop">Stop</button></div>`;
-  if (check.error) return `<div class="g-sec"><h3>Check transcript</h3><p class="hint err" id="ckErr"></p><button id="ckStart">Try again</button></div>`;
-  const open = [...check.fixes, ...check.corrections].filter((f) => f.st === "open").length;
-  const nf = check.fixes.length, nc = check.corrections.length;
-  const head = !nf && !nc ? `<span class="ck-n">No recognition errors found.</span><button id="ckStart">Check again</button>`
-    : open ? `<span class="ck-n">${nf} fix${nf === 1 ? "" : "es"}${nc ? `, ${nc} new correction${nc === 1 ? "" : "s"}` : ""} to review</span><button id="ckAll" class="go">Accept all</button><button id="ckNone">Skip all</button>`
-    : `<span class="ck-n">Reviewed: ${check.fixes.filter((f) => f.st === "accepted").length} of ${nf} fixes applied${nc ? `, ${check.corrections.filter((c) => c.st === "accepted").length} of ${nc} corrections added` : ""}.</span><button id="ckStart">Check again</button>`;
-  const act = (k, i, st) => st === "open" ? `<span class="ck-act"><button data-ck="${k}" data-i="${i}" data-do="accept">Accept</button><button data-ck="${k}" data-i="${i}" data-do="skip">Skip</button></span>`
-    : `<span class="ck-st">${{ accepted: "Applied", skipped: "Skipped", stale: "Line changed since", added: "Added" }[st] || st}</span>`;
-  return `<div class="g-sec" id="ckSec"><h3>Check transcript</h3><div class="ck-head">${head}</div>` +
-    check.fixes.map((f, i) => `<div class="ck-fix${f.st === "open" ? "" : " done"}" data-fix="${i}"><a data-t="${f.t}" title="Show it in the transcript">${fmt(f.t)}</a><span>${wordDiff(f.old, f.text)}<span class="why"></span></span>${act("fix", i, f.st)}</div>`).join("") +
-    (nc ? `<h3 style="margin-top:18px">New glossary corrections</h3><p class="hint">Fixed live in this course's next lectures.</p>` +
-      check.corrections.map((c, i) => `<div class="ck-fix${c.st === "open" ? "" : " done"}" data-corr="${i}"><span></span><span><del></del> → <b></b></span>${act("corr", i, c.st)}</div>`).join("") : "") +
-    `</div>`;
+function renderCompare(e) {
+  const rows = e.rows || [];
+  const changed = rows.filter((r) => r.old != null && r.new != null && r.old !== r.new).length, removed = rows.filter((r) => r.new == null).length;
+  $("cmpView").innerHTML = `<div class="cmp-note"><b></b> compared with the <b>Original</b>: ${changed} ${changed === 1 ? "line" : "lines"} changed, ${removed} removed.</div>` +
+    rows.map((r) => `<div class="seg${r.new == null ? " gone" : ""}" data-t="${r.t}"><div class="ts"><span>${fmt(r.t)}</span></div><div class="txt">${r.new == null ? esc(r.old) : r.old == null ? `<ins>${esc(r.new)}</ins>` : wordDiff(r.old, r.new)}</div></div>`).join("");
+  $("cmpView").querySelector(".cmp-note b").textContent = verLabel(verOf(e.id));
+  Find.refresh();
 }
-function fillCheck(v) {
-  if (!ckHere()) return;
-  if (check.error) { $("ckErr").textContent = check.error; return; }
-  v.querySelectorAll("[data-fix] .why").forEach((el, i) => { el.textContent = check.fixes[i].why; });
-  v.querySelectorAll("[data-corr]").forEach((el, i) => { el.querySelector("del").textContent = check.corrections[i].heard; el.querySelector("b").textContent = check.corrections[i].correct; });
+// The lecture's lines as another version shows them; the pane stays at the same moment.
+function showView(e) {
+  vers = e.versions || NO_VERSIONS; comparing = false;
+  const sc = $("scroller"), top = [...$("segs").children].find((r) => r.offsetTop + r.offsetHeight > sc.scrollTop), t = top ? +top.dataset.t : 0;
+  clearTranscript();
+  for (const [ts, text] of e.lines) addSeg(ts, text, true);
+  if (!e.lines.length) $("empty").style.display = "";
+  if (follow && state !== "idle") scrollLive();
+  else { const at = [...$("segs").children].find((r) => +r.dataset.t >= t); sc.scrollTop = at ? at.offsetTop - 24 : 0; }
+  send("slidesState", { path: curPath });
+  Find.refresh();
 }
-// Lines with a fix waiting get a wavy underline in the transcript.
-function markFixes() {
-  document.querySelectorAll("#segs .seg.has-fix").forEach((r) => r.classList.remove("has-fix"));
-  if (!ckHere() || !check.fixes) return;
-  const rows = $("segs").children;
-  for (const f of check.fixes) if (f.st === "open") { const j = fixLine(f); if (j >= 0) rows[j]?.classList.add("has-fix"); }
-}
-function fixLine(f) { return segs[f.i]?.text === f.old ? f.i : segs.findIndex((x) => x.text === f.old); }
-function acceptFix(f) {
-  const j = fixLine(f), t = $("segs").children[j]?.lastChild;
-  if (j < 0 || document.activeElement === t) { f.st = "stale"; return; }
-  segs[j].text = f.text; t.textContent = f.text;
-  send("lineEdit", { path: curPath, op: "set", i: j, text: f.text });
-  f.st = "accepted";
-}
-function decide(kind, i, accept) {
-  if (kind === "fix") { const f = check.fixes[i]; if (f.st !== "open") return; if (accept) acceptFix(f); else f.st = "skipped"; }
-  else { const c = check.corrections[i]; if (c.st !== "open") return; c.st = accept ? "accepted" : "skipped";
-    if (accept) send("glossaryAdd", { course: $("course").value, corrections: [{ heard: c.heard, correct: c.correct }] }); }
-}
-function afterDecide() { $("words").textContent = wordCount().toLocaleString() + " words"; markFixes(); renderGloss(); }
-$("checkBtn").onclick = () => startCheck();
-$("glossView").addEventListener("click", (e) => {
-  if (e.target.id === "ckStart") return startCheck();
-  if (e.target.id === "ckStop") { e.target.disabled = true; e.target.textContent = "Stopping…"; return send("cancel", { kind: "check" }); }
-  if (e.target.id === "ckAll" || e.target.id === "ckNone") {
-    const yes = e.target.id === "ckAll";
-    check.fixes.forEach((_, i) => decide("fix", i, yes)); check.corrections.forEach((_, i) => decide("corr", i, yes));
-    return afterDecide();
+
+/* ---------- find (⌘F) ---------- */
+// One bar, over the transcript or the open doc: the pane last clicked or typed in. Matches are
+// boxes drawn in a layer of the pane's scroll box, never marks in the text, so a doc being edited
+// saves exactly as it was. They follow edits and new lines as they come.
+const Find = (() => {
+  const bar = $("findBar"), input = $("findIn");
+  let pane = "t", tgt = null, ranges = [], cur = -1, layer = null, obs = null, ro = null, timer = 0;
+  const isOpen = () => bar.classList.contains("on");
+  const onDoc = () => docsOpen && !glossOpen && !setOpen && $("docPage").style.display !== "none";
+  for (const ev of ["mousedown", "focusin"]) addEventListener(ev, (e) => {
+    if (e.target.closest?.("#findBar")) return;
+    if (e.target.closest?.("#left")) pane = "t"; else if (e.target.closest?.("#card")) pane = "d";
+  }, true);
+  const target = () => pane === "d" && onDoc() ? { host: $("docsView"), scroll: $("docScroll"), root: $("docBody") }
+    : { host: $("left"), scroll: $("scroller"), root: comparing ? $("cmpView") : $("segs") };
+  function attach(t) {
+    detach(); tgt = t; t.host.append(bar);
+    layer = document.createElement("div"); layer.className = "find-layer"; t.scroll.append(layer); t.scroll.classList.add("finding");
+    obs = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(() => search(false), 150); });
+    obs.observe(t.root, { subtree: true, childList: true, characterData: true });
+    ro = new ResizeObserver(draw); ro.observe(t.scroll);
   }
-  const b = e.target.closest("[data-ck]"); if (b) { decide(b.dataset.ck, +b.dataset.i, b.dataset.do === "accept"); return afterDecide(); }
-  const a = e.target.closest("[data-fix] a"); if (!a) return;
-  const f = check.fixes[+a.closest("[data-fix]").dataset.fix], row = $("segs").children[fixLine(f)];
-  if (!row) return goToTime(fmt(f.t));
-  follow = false; row.scrollIntoView({ behavior: "smooth", block: "center" });
-  row.classList.remove("flash"); void row.offsetWidth; row.classList.add("flash");
-});
+  function detach() { tgt?.scroll.classList.remove("finding"); obs?.disconnect(); ro?.disconnect(); layer?.remove(); layer = tgt = null; ranges = []; cur = -1; clearTimeout(timer); }
+  function open() {
+    const t = target(); if (!isOpen() || t.root !== tgt?.root) attach(t);
+    bar.classList.add("on"); input.focus(); input.select(); search(true);
+  }
+  function close() { if (bar.contains(document.activeElement)) document.activeElement.blur(); bar.classList.remove("on"); detach(); }
+  // The pane's text as one string (a break between lines or blocks), searched without case.
+  function search(jump) {
+    if (!tgt) return;
+    const q = input.value, keep = cur;
+    ranges = []; cur = -1;
+    if (q) {
+      const nodes = [], starts = []; let flat = "", block = null;
+      const w = document.createTreeWalker(tgt.root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => n.parentElement.closest("button, .ts, svg, .katex-mathml, .cmp-note") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+      for (let n; (n = w.nextNode());) {
+        let b = n.parentElement; while (b.parentElement && b.parentElement !== tgt.root) b = b.parentElement;
+        if (block && b !== block) flat += "\n";
+        block = b; nodes.push(n); starts.push(flat.length); flat += n.data;
+      }
+      // The node and offset of position k: the last node starting at or before it (for an end, before it).
+      const pos = (k, end) => { let lo = 0, hi = nodes.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (end ? starts[m] < k : starts[m] <= k) lo = m; else hi = m - 1; } return [nodes[lo], k - starts[lo]]; };
+      const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+      for (let m; (m = re.exec(flat)) && ranges.length < 5000;) {
+        const r = document.createRange(), [a, ao] = pos(m.index, false), [b, bo] = pos(m.index + m[0].length, true);
+        r.setStart(a, ao); r.setEnd(b, bo); ranges.push(r);
+      }
+      if (ranges.length) {
+        const top = tgt.scroll.getBoundingClientRect().top;
+        cur = jump ? Math.max(0, ranges.findIndex((r) => r.getBoundingClientRect().bottom > top)) : Math.min(Math.max(keep, 0), ranges.length - 1);
+      }
+    }
+    draw(); count();
+    if (jump && cur >= 0) reveal();
+  }
+  function draw() {
+    if (!layer) return;
+    const o = tgt.scroll.getBoundingClientRect(), x = tgt.scroll.scrollLeft - o.left, y = tgt.scroll.scrollTop - o.top, f = document.createDocumentFragment();
+    ranges.forEach((r, i) => {
+      if (i > 2000 && i !== cur) return;
+      for (const q of r.getClientRects()) {
+        const d = document.createElement("i"); if (i === cur) d.className = "cur";
+        d.style.cssText = `left:${q.left + x - 1}px;top:${q.top + y}px;width:${q.width + 2}px;height:${q.height}px`;
+        f.append(d);
+      }
+    });
+    layer.replaceChildren(f);
+  }
+  function count() { setText($("findN"), !input.value ? "" : ranges.length ? `${cur + 1} of ${ranges.length}${ranges.length >= 5000 ? "+" : ""}` : "No results"); }
+  function reveal() {
+    const q = ranges[cur].getBoundingClientRect(), o = tgt.scroll.getBoundingClientRect();
+    if (q.top < o.top + 60 || q.bottom > o.bottom - 80) { tgt.scroll.scrollTop += q.top - o.top - o.height / 3; if (tgt.scroll === $("scroller")) follow = false; }
+  }
+  function step(d) {
+    if (!isOpen()) return open();
+    if (!ranges.length) return;
+    cur = (cur + d + ranges.length) % ranges.length; draw(); count(); reveal();
+  }
+  input.addEventListener("input", () => search(true));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); }
+  });
+  $("findNext").onclick = () => step(1);
+  $("findPrev").onclick = () => step(-1);
+  $("findClose").onclick = close;
+  return {
+    open, close, step, isOpen,
+    // The pane's content was swapped (compare, another tab): look again, or close if the doc's gone.
+    refresh() {
+      if (!isOpen()) return;
+      if (tgt?.root === $("docBody") && !onDoc()) return close();
+      const t = target(); if (t.root !== tgt?.root) attach(t);
+      search(false);
+    },
+    cmd(a) { if (a === "find") open(); else if (a === "findNext") step(1); else if (a === "findPrev") step(-1); },
+  };
+})();
+
 /* ---------- the right side: card, capsule, menus ---------- */
 // The card shows Slides or Docs (docsOpen); Glossary and Settings are sheets over it (glossOpen,
 // setOpen). The capsule at its bottom holds the tab's actions. Asking for slides or notes opens it
@@ -1185,14 +1399,15 @@ function closePops() {
   for (const m of document.querySelectorAll(".pop.open")) { m.classList.remove("open"); m.opener?.classList.remove("open"); }
   if (document.activeElement?.closest?.(".pop:not(.open)")) document.activeElement.blur();
 }
-// Opens `menu` above `btn` (filled by `fill`), inside the card; a second click closes it.
+// Opens `menu` above `btn` (filled by `fill`), inside its pane (the card or the transcript); a
+// second click closes it.
 function togglePop(menu, btn, fill) {
   const was = menu.classList.contains("open");
   if (menu !== $("modelMenu")) closePops(); else { menu.classList.remove("open"); btn.classList.remove("open"); }
   if (was) return;
   fill?.();
   menu.opener = btn; menu.classList.add("open"); btn.classList.add("open");
-  const card = $("card").getBoundingClientRect(), r = btn.getBoundingClientRect();
+  const card = (menu.closest("#left") || $("card")).getBoundingClientRect(), r = btn.getBoundingClientRect();
   menu.style.bottom = (card.bottom - r.top + 8) + "px";
   menu.style.left = Math.max(12, Math.min(r.left - card.left, card.width - menu.offsetWidth - 12)) + "px";
 }
@@ -1213,11 +1428,10 @@ function renderCapsule() {
   // A job running on the other tab shows as a dot on that tab.
   $("tabSlides").classList.toggle("job", slidesBusy && docs);
   $("docsBtn").classList.toggle("job", draftBusy() && !docs);
-  // Check transcript: fixes waiting in the Glossary.
-  const open = ckHere() && check.fixes ? [...check.fixes, ...check.corrections].filter((f) => f.st === "open").length : 0;
-  const checking = !!(ckHere() && check.busy);
-  $("moreBtn").classList.toggle("badge", open > 0 || checking);
-  $("glossK").innerHTML = checking ? "checking…" : open ? `<span class="dotp"></span>${open} to review` : "";
+  // Corrections from the last clean up, waiting in the Glossary.
+  const open = sgOpen();
+  $("moreBtn").classList.toggle("badge", open > 0);
+  $("glossK").innerHTML = open ? `<span class="dotp"></span>${open} to review` : "";
   tickProg();
 }
 function progText(kind) {
@@ -1262,7 +1476,7 @@ $("hintIn").onkeydown = (e) => {
 };
 function fillModelMenu() {
   const rows = (id) => [...$(id).options].map((o) => `<button data-sel="${id}" data-v="${o.value}"><span class="ok">${o.selected ? OK_SVG : ""}</span><span class="t">${esc(o.text)}</span></button>`).join("");
-  $("modelMenu").innerHTML = `<div class="lab">Model</div>${rows("aiModel")}<hr><div class="lab">Reasoning</div>${rows("effort")}<div class="note">For slides, notes and checks; also in Settings. Rebuild, review cards, notes and checks use at least High.</div>`;
+  $("modelMenu").innerHTML = `<div class="lab">Model</div>${rows("aiModel")}<hr><div class="lab">Reasoning</div>${rows("effort")}<div class="note">For slides, notes and clean ups; also in Settings. Rebuild, review cards, notes and clean ups use at least High.</div>`;
 }
 $("cmpModel").onclick = () => togglePop($("modelMenu"), $("cmpModel"), fillModelMenu);
 $("modelMenu").onclick = (e) => {
@@ -1391,7 +1605,7 @@ $("lecNew").onclick = () => {
 function renameBlock() {
   if (!curPath) return "Open a lecture to rename it";
   if (state !== "idle") return "Stop the recording to rename the lecture";
-  if (slidesBusy || check?.busy || draftBusy()) return "Wait for Claude to finish to rename the lecture";
+  if (slidesBusy || cleaning || draftBusy()) return "Wait for Claude to finish to rename the lecture";
   return "";
 }
 function startRename() {
@@ -1584,22 +1798,29 @@ window.onEngine = (e) => {
     case "modelDownloadError": dl = { error: e.message }; renderSetup(); toast(e.message, true); break;
     case "micTest": mic = e; renderSetup(); break;
     case "claudeCheck": claude = e; renderSetup(); break;
-    case "checkResult": {
-      if (!check || check.path !== e.path) break;
-      check = { path: e.path, fixes: e.fixes.map((f) => ({ ...f, st: "open" })), corrections: e.corrections.map((c) => ({ ...c, st: "open" })) };
-      // Terms are only context for Claude's next requests: added without asking.
-      if (e.terms?.length) send("glossaryAdd", { course: $("course").value, terms: e.terms });
-      glossOpen = true; setOpen = false; markFixes(); renderGloss(); renderSlidesBar();
-      toast(e.fixes.length ? `Check done: ${e.fixes.length} fix${e.fixes.length === 1 ? "" : "es"} to review in Glossary` : "Check done: no recognition errors found");
+    case "cleanProgress": if (cleaning?.path === e.path) { cleaning.done = e.done; cleaning.total = e.total; } break;
+    case "cleaned": {
+      const was = cleaning; cleaning = null; delete jobStart.clean;
+      if (was?.path === e.path && e.path === curPath) showView(e);
+      loadGloss(); // the course terms it found are added already
+      const c = (e.suggestions || []).map((x) => ({ ...x, st: "open" }));
+      if (c.length) suggest = { path: e.path, corrections: c };
+      if (c.length && e.path === curPath) { glossOpen = true; setOpen = false; }
+      renderGloss();
+      const st = e.stats || {}, more = c.length ? ` · ${c.length} suggested ${c.length === 1 ? "correction" : "corrections"} in the Glossary` : "";
+      toast(`${st.extended ? "Clean version extended" : "Clean version ready"}: ${st.changed || 0} ${st.changed === 1 ? "line" : "lines"} rewritten, ${st.removed || 0} removed${more}`);
       break;
     }
-    case "checkError": {
-      if (!check || check.path !== e.path) break;
-      if (e.message === STOPPED) { check = null; toast("Check stopped"); }
-      else { check = { path: e.path, error: e.message }; toast(e.message, true); }
-      renderGloss(); markFixes(); renderSlidesBar();
+    case "cleanError": {
+      cleaning = null; delete jobStart.clean;
+      toast(e.message === STOPPED ? "Clean up stopped: nothing was changed" : e.message, e.message !== STOPPED);
       break;
     }
+    case "view": if (e.path === curPath) showView(e); break;
+    case "versions": if (e.path === curPath) vers = e.versions || NO_VERSIONS; break;
+    case "versionError": toast(e.message, true); if (comparing) { comparing = false; $("cmpView").innerHTML = ""; } break;
+    case "compare": if (e.path === curPath && comparing) renderCompare(e); break;
+    case "menu": Find.cmd(e.action); break;
     case "glossary": {
       if (e.course !== $("course").value) break;
       gloss = { corrections: e.corrections || [], terms: e.terms || [] };
@@ -1621,8 +1842,14 @@ window.onEngine = (e) => {
       if (follow) scrollLive();
       break;
     }
-    case "commit": addSeg(e.t, e.text);
-      if (follow && !document.activeElement?.closest?.("#segs")) scrollLive(); break;
+    case "commit": {
+      // A pane rebuilt from the file (a version picked, a clean up done) may hold this line already.
+      const last = segs[segs.length - 1];
+      if (last && last.t === e.t && last.text === e.text) break;
+      addSeg(e.t, e.text);
+      if (follow && !document.activeElement?.closest?.("#segs")) scrollLive();
+      break;
+    }
     case "level": {
       const pct = Math.max(0, Math.min(100, (e.db + 60) / 50 * 100));
       $("meter").firstChild.style.width = pct + "%"; break;
@@ -1642,7 +1869,8 @@ window.onEngine = (e) => {
       curPath = e.path; // same lecture, same lines: only its paths change
       if (renameOld == null) { $("title").value = e.title === "Lecture" ? "" : e.title; fitTitle(); }
       showFile(e.path, "Renamed");
-      if (check?.path === e.from) check.path = e.path;
+      if (suggest?.path === e.from) suggest.path = e.path;
+      if (cleaning?.path === e.from) cleaning.path = e.path;
       Docs.moved(e.from, e.path);
       send("slidesState", { path: e.path }); // no toast: the header shows the new name
       break;
@@ -1675,18 +1903,18 @@ window.onEngine = (e) => {
         if (document.activeElement !== r.lastChild && r.lastChild.textContent !== text) r.lastChild.textContent = text;
       });
       $("words").textContent = wordCount().toLocaleString() + " words";
-      markFixes();
+      if (e.versions) vers = e.versions;
       send("slidesState", { path: curPath });
       break;
     }
     case "transcript": {
-      clearTranscript(); elapsed = 0; runStart = null;
+      clearTranscript(); elapsed = 0; runStart = null; vers = e.versions || NO_VERSIONS; comparing = false;
       $("title").value = e.title === "Lecture" ? "" : e.title; fitTitle();
       for (const [t, text] of e.lines) addSeg(t, text, true);
       if (!e.lines.length) $("empty").style.display = "";
       $("scroller").scrollTop = 0; follow = false;
       showFile(e.path);
-      curPath = null; setCurPath(e.path); markFixes();
+      curPath = null; setCurPath(e.path); Find.refresh();
       break;
     }
     case "slides": {
@@ -1732,6 +1960,7 @@ setInterval(() => {
   const t = elapsed + (runStart !== null ? (performance.now() - runStart) / 1000 : 0);
   $("timer").textContent = fmt(t);
   if ($("card").classList.contains("busyc")) tickProg();
+  if (cleanHere()) tickVer();
 }, 250);
 
 $("startBtn").onclick = () => {
@@ -1944,6 +2173,8 @@ document.addEventListener("keydown", (ev) => {
     if (state === "idle") $("startBtn").click(); else $("stopBtn").click();
   } else if (ev.metaKey && ev.key === "o" && !$("setup").classList.contains("on")) {
     ev.preventDefault(); if (!$("lecMenu").classList.contains("open")) openLecMenu();
+  } else if (ev.metaKey && !ev.altKey && !ev.ctrlKey && (ev.key === "f" || ev.key === "g" || ev.key === "G") && !$("setup").classList.contains("on")) {
+    ev.preventDefault(); Find.cmd(ev.key === "f" ? "find" : ev.shiftKey ? "findPrev" : "findNext");
   } else if (ev.metaKey && ev.key === ",") { ev.preventDefault(); if (!$("setup").classList.contains("on")) $("setBtn").click(); }
   else if (ev.key === "Escape" && !$("setup").classList.contains("on")) {
     if (document.querySelector(".pop.open")) closePops();

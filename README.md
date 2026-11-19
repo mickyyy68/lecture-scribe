@@ -38,19 +38,27 @@ On first launch a short setup walks you through it: downloading the speech model
 4. **Present** opens the deck in your browser: press P to present, use ← → to move, and ⌘P to print a PDF.
 5. Open a past lecture by clicking the lecture's name at the top left (or ⌘O): type to search by title or date, then pick one to read it, make slides for it, or press **Continue** to record more into it. The same menu shows the open lecture's file, its word count and when it was last saved, with **Show in Finder**, **New lecture** to name and record the next one, and **Rename…** to rename the open lecture: type the new name in the header and press Enter (Escape keeps the old one). Its transcript, audio, slides and Docs folder are renamed together, keeping the date they start with. Renaming waits until the recording is stopped and Claude has finished.
 
-The deck is saved next to the transcript as `<lecture> · Slide.json` and `<lecture> · Slide.html`.
+The deck is saved next to the transcript as `<lecture> · Slide.json` and `<lecture> · Slide.html`. Clean versions are in `<lecture> · Versions/`.
 
 ### Fixing the transcript
 
 Click any line to edit it in place, as in a notes app. **Enter** splits the line at the cursor, and **Backspace** at the start of a line joins it to the line above. **↑** and **↓** at the start or end of a line move to the next one, and **Esc** undoes your typing in that line. Hover a line and click **+** next to its time to add a line below it, for something the model missed or a note of your own. A new line takes the time of the line above it. Empty a line to delete it. Dragging across lines still selects text to copy. Cut, copy, paste and undo work everywhere in the app (they're in the **Edit** menu).
 
-This works during a recording too: new lines keep arriving at the end while you fix earlier ones. Each change is saved to the lecture's `.md` file when you leave the line, and the slides stay matched to their lines. Editing is off only while slides are being made.
+This works during a recording too: new lines keep arriving at the end while you fix earlier ones. Each change is saved when you leave the line, to the version you're reading (lines recorded after it go to the lecture's `.md` file), and the slides stay matched to their lines. Editing is off while slides are being made, while Claude cleans up the transcript, and while comparing versions.
 
-### Checking the transcript with Claude
+### Cleaning up the transcript with Claude
 
-**Check transcript** (in the **⋯** menu) has Claude proofread the whole lecture for recognition errors: misheard terms, names, commands and acronyms ("un dip" → "UDP", "giostname" → "hostname"). It only restores what was said, and never rewrites, shortens or adds. The proposed fixes appear in the **Glossary** (from the **⋯** menu, which shows a dot while fixes wait) as before → after, and their lines get a wavy underline in the transcript. Accept or skip each one, or all at once. Nothing changes until you accept. A line you edited since the check is left alone.
+The speech model mishears a lot in a noisy room: names, commands, acronyms, whole half-sentences. **Clean up**, in the bar under the transcript, has Claude rewrite each line into what the professor most likely said and drop what is only noise: chatter, false starts, stammers. It never merges or moves lines, and it marks what it can't be sure of with "(?)". It uses the model from Settings, at least at High reasoning, and works through the lecture in parts at the same time: a 90-minute lecture takes a few minutes. The bar shows the parts done and **Stop**, which saves nothing.
 
-Claude also proposes new glossary corrections for errors likely to come back. Accept them and they're fixed live in the course's next lectures. It uses the model from Settings, at least at High reasoning: a 30-minute lecture takes about three minutes, and **Stop** cancels it. It works during a recording too.
+The result is a new **version**; the original transcript is never changed. The bar under the transcript shows which version you're reading. Click it to switch between the original and the clean versions, or to rename or delete one (it goes to the Trash). The version you pick is the one you read and edit, and the one slides, notes and Claude use. **Compare** shows the version against the original, line by line, with the words Claude changed and the lines it removed.
+
+Lines recorded after a version was made show after its last line; the bar counts them, and **Clean up** cleans just those into the same version. On a version that covers the whole lecture, Clean up makes a new one from the original.
+
+Claude also proposes glossary corrections for words the transcriber keeps getting wrong. Ordinary words are left out, since they would be "fixed" everywhere they're said. The proposals wait in the **Glossary** (from the **⋯** menu, which shows a dot while they wait). Accept them and they're fixed live in the course's next lectures. The course terms it finds are added on their own.
+
+### Finding text
+
+**⌘F** opens a find bar over the transcript, or over the open doc if that's where you last clicked. Matches are highlighted as you type, without case. **Enter** or **⌘G** goes to the next one, **⇧Enter** or **⇧⌘G** to the previous one, and **Esc** closes the bar. New lines and edits are searched as they come.
 
 ### Docs
 
@@ -69,13 +77,13 @@ Rebuild deck, Review cards and Undo last are in the **⋯** menu at the right en
 - **Rebuild deck** makes the whole deck again from the full lecture, more carefully. Like Review cards, it takes a suggestion first.
 - **Review cards** adds 6–12 exam-style questions at the end. The answers stay hidden until you click them.
 - **Undo last** removes what the last click added.
-- **Glossary.** Speech models mishear technical terms, and Parakeet can't be given a word list. So each time slides are made, the model also reports misheard words ("HCB" → "DHCP") and the course's key terms. They're saved per course and fixed live in later transcripts. Remove a wrong entry with ×.
+- **Glossary.** Speech models mishear technical terms, and Parakeet can't be given a word list. So each time slides are made, the model also reports misheard words ("HCB" → "DHCP") and the course's key terms. They're saved per course and fixed live in later transcripts. Ordinary words are never added as corrections, since they would be changed everywhere they're said. Remove a wrong entry with ×.
 - **PDFs.** Add the course's PDFs, and the model searches them to spell terms right and to point you to pages ("Material: «Lab3.pdf» p. 4"). It never adds content from them. Text is extracted on the Mac with PDFKit. Scanned PDFs without a text layer aren't supported.
 
 ### Settings
 
 - **Slide style.** Choose density (minimal, balanced, detailed), title style (statement, topic or question), how points are phrased, how long the notes are, and whether to favour diagrams or text. Add your own rules too. Claude makes three sample slides from about three minutes of your latest lecture (or a built-in sample lecture), so you see the result before a real lecture. Type what you'd change ("shorter titles", "always include the professor's examples"): the samples are made again and the request is saved as a rule. The style applies to every slide made afterwards.
-- **Claude.** The model and reasoning effort for everything Claude makes: slides, docs, review cards and checks. Low is fast; Rebuild deck, Review cards, Draft notes and Check transcript always use at least High.
+- **Claude.** The model and reasoning effort for everything Claude makes: slides, docs, review cards and clean ups. Low is fast; Rebuild deck, Review cards, Draft notes and Clean up always use at least High.
 - **Language.** This sets the language of slides, review cards and drafted notes. By default it follows the lecture's language, so you can transcribe a lecture in one language and study it in another.
 - **Slide theme.** Themes set the colours and fonts of the slides and the exported decks, in light and dark mode. The app window keeps its own look (warm paper, light or dark with macOS), whatever the theme.
   - A theme is a small CSS file in `~/Library/Application Support/Transcribe Lecture/themes/` that overrides the tokens in [`src/theme/default.css`](src/theme/default.css).
@@ -86,7 +94,7 @@ Rebuild deck, Review cards and Undo last are in the **⋯** menu at the right en
 ## Privacy
 
 - Audio and transcription stay on your Mac.
-- When you make slides, draft notes or check a transcript, the transcript is sent to Anthropic through Claude Code. If the course has PDFs, the pages the model looks up are sent too.
+- When you make slides, draft notes or clean up a transcript, the transcript is sent to Anthropic through Claude Code. If the course has PDFs, the pages the model looks up are sent too.
 - Claude Code runs in an empty temporary folder, without your own Claude Code settings, tools, MCP servers or `CLAUDE.md`. It uses your subscription, never an `ANTHROPIC_API_KEY` from the environment.
 
 ## Files
@@ -103,7 +111,7 @@ The binary is `target/release/transcribe-lecture` (or `Transcribe Lecture.app/Co
 ```sh
 transcribe-lecture --slides lecture.md [--course "Networks"] [--lang it] [--rebuild | --review] [--model opus] [--effort high] [--hint "more diagrams"]
 transcribe-lecture --draft lecture.md [--course "Networks"] [--lang it] [--model opus] [--effort high] [--hint "focus on the lab"]
-transcribe-lecture --check lecture.md [--course "Networks"] [--model sonnet]
+transcribe-lecture --clean lecture.md [--course "Networks"] [--lang it] [--model sonnet] [--effort high]
 transcribe-lecture --add-pdf notes.pdf --course "Networks"
 transcribe-lecture --make-theme "Name" "description" [--model opus]
 transcribe-lecture --download-model

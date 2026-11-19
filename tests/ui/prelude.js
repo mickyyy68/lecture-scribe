@@ -30,6 +30,13 @@
   const freeDoc = (name) => { for (let n = 1; ; n++) { const p = `${DOCDIR}/${name}${n > 1 ? " " + n : ""}.md`; if (!docs[p]) return p; } };
   let lines = LINES.map((l) => [...l]);
   const fire = (e) => setTimeout(() => window.onEngine(e), 0);
+  // Clean versions, as versions.rs keeps them: the view is the active version's lines, then the
+  // original's lines after the ones it covers.
+  let ver = { active: null, versions: [], files: {} }, cleanJob = null;
+  const verActive = () => ver.versions.find((v) => v.id === ver.active);
+  const view = () => { const v = verActive(); return v ? [...ver.files[v.id], ...lines.slice(v.covers)].map((l) => [...l]) : lines.map((l) => [...l]); };
+  const verInfo = () => ({ active: ver.active, versions: ver.versions.map((v) => ({ ...v })), lines: ver.active ? ver.files[ver.active].length : null });
+  const viewEv = (type, path = PATH) => ({ type, path, title: "Test Lecture", lines: view(), versions: verInfo() });
   const slidesState = (path = PATH) => ({ type: "slides", path, title: "Test Lecture", lines: lines.length, done: 0, slides: [], lang: "en", usage: null, flagged: 0, lookups: [] });
 
   addEventListener("error", (e) => errors.push(e.message));
@@ -67,12 +74,28 @@
       case "docDelete": delete docs[m.doc]; fire({ type: "docs", path: m.path, docs: docList(), open: null }); break;
       case "docImage": fire({ type: "docImage", path: m.path, doc: m.doc, id: m.id, src: `images/pasted-${m.id}.png`, url: m.data }); break;
       case "lineEdit": {
-        // What slides::edit_body does to the file.
-        const text = m.text.split(/\s+/).filter(Boolean).join(" ");
-        if (m.op === "insert" && text) lines.splice(m.i, 0, [lines[m.i - 1]?.[0] ?? lines[0]?.[0] ?? 0, text]);
-        else if (m.op === "delete" || (m.op === "set" && !text)) lines.splice(m.i, 1);
-        else if (m.op === "set") lines[m.i][1] = text;
-        fire({ type: "lineEdited", path: m.path, lines: lines.map((l) => [...l]) });
+        // What slides::edit_body does, to the file the line lives in (versions::route).
+        const text = m.text.split(/\s+/).filter(Boolean).join(" "), v = verActive(), n = v ? ver.files[v.id].length : 0;
+        const inVer = v && (m.i < n || (m.op === "insert" && m.i === n));
+        const ls = inVer ? ver.files[v.id] : lines, i = inVer || !v ? m.i : v.covers + m.i - n;
+        if (m.op === "insert" && text) { ls.splice(i, 0, [ls[i - 1]?.[0] ?? ls[0]?.[0] ?? 0, text]); if (v && !inVer && i < v.covers) v.covers++; }
+        else if (m.op === "delete" || (m.op === "set" && !text)) ls.splice(i, 1);
+        else if (m.op === "set") ls[i][1] = text;
+        fire({ ...viewEv("lineEdited", m.path) });
+        break;
+      }
+      // Clean up waits for the test: T.cleanStep / T.cleanDone answer it.
+      case "cleanUp": cleanJob = m; fire({ type: "cleanProgress", path: m.path, done: 0, total: 2 }); break;
+      case "cancel": if (m.kind === "clean" && cleanJob) { fire({ type: "cleanError", path: cleanJob.path, message: "Stopped." }); cleanJob = null; } break;
+      case "versionSet": ver.active = m.id || null; fire(viewEv("view", m.path)); break;
+      case "versionDelete": ver.versions = ver.versions.filter((v) => v.id !== m.id); delete ver.files[m.id]; ver.active = null; fire(viewEv("view", m.path)); break;
+      case "versionRename": verActive().name = m.name; fire({ type: "versions", path: m.path, versions: verInfo() }); break;
+      case "versionCompare": {
+        const v = verActive(), rows = [];
+        const left = lines.slice(0, v.covers), right = ver.files[v.id].slice();
+        for (const [t, old] of left) { const k = right.findIndex((r) => r[0] === t); rows.push({ t, old, new: k < 0 ? null : right.splice(k, 1)[0][1] }); }
+        for (const [t, x] of lines.slice(v.covers)) rows.push({ t, old: x, new: x });
+        fire({ type: "compare", path: m.path, id: v.id, rows });
         break;
       }
     }
@@ -101,13 +124,33 @@
     $: el,
     /** Opens the fake lecture, like picking it in "Open a past lecture". */
     async open() {
-      lines = LINES.map((l) => [...l]);
-      window.onEngine({ type: "transcript", path: PATH, title: "Test Lecture", lines: lines.map((l) => [...l]) });
+      lines = LINES.map((l) => [...l]); ver = { active: null, versions: [], files: {} }; cleanJob = null;
+      window.onEngine(viewEv("transcript"));
       await T.until(() => document.querySelectorAll("#segs .seg").length === LINES.length, "the lecture's lines are shown");
       await wait(20);
     },
     docs,
     DOCDIR,
+    /** The running clean up's request, or null. */
+    cleanJob: () => cleanJob,
+    cleanStep: (done) => window.onEngine({ type: "cleanProgress", path: cleanJob.path, done, total: 2 }),
+    /** Ends the clean up as clean.rs does: `edit(text, i)` gives line i's cleaned text, "" to drop it. */
+    cleanDone(edit, suggestions = []) {
+      const v = verActive(), from = v && v.covers < lines.length ? v.covers : 0;
+      const out = lines.slice(from).map(([t, x], k) => [t, edit(x, from + k)]);
+      const changed = out.filter(([, y], k) => y && y !== lines[from + k][1]).length, removed = out.filter(([, y]) => !y).length;
+      const kept = out.filter(([, y]) => y);
+      if (from) { ver.files[v.id].push(...kept); v.covers = lines.length; v.changed += changed; v.removed += removed; }
+      else {
+        const id = `clean-${ver.versions.length + 1}`;
+        ver.files[id] = kept; ver.active = id;
+        ver.versions.push({ id, name: "Clean", created: "2026-11-19T10:3" + ver.versions.length, model: "opus", covers: lines.length, changed, removed });
+      }
+      cleanJob = null;
+      window.onEngine({ ...viewEv("cleaned"), suggestions, stats: { lines: out.length, changed, removed, extended: !!from } });
+    },
+    /** Lines recorded after the clean up (the engine's commit). */
+    commit(t, text) { lines.push([t, text]); window.onEngine({ type: "commit", t, text }); },
     /** Adds a doc to the fake lecture's folder. */
     addDoc(name, md, images) { const p = `${DOCDIR}/${name}.md`; docs[p] = { md, t: ++docN, images }; return p; },
     /** Opens the fake lecture and its Docs tab, and waits for the first doc (if any) to load. */
@@ -135,6 +178,8 @@
     async type(text) { await native("type", { text }); await wait(40); },
     async key(key, mods = []) { await native("key", { key, mods }); await wait(40); },
     async shot(name) { return native("shot", { name }); },
+    /** A screenshot in the dark theme; the page goes back to light after. */
+    async dark(name) { const h = document.documentElement; h.dataset.theme = "dark"; await wait(60); try { return await T.shot(name); } finally { h.dataset.theme = "light"; await wait(30); } },
     // Assertions.
     ok(c, msg) { if (!c) throw new Error(msg || "expected true"); },
     eq(a, b, msg) { if (show(a) !== show(b)) throw new Error(`${msg ? msg + ": " : ""}expected ${show(b)}, got ${show(a)}`); },
