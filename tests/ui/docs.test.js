@@ -3,17 +3,19 @@ const $ = (id) => document.getElementById(id);
 const body = () => $("docBody");
 async function clickEnd(sel) { const e = T.$(sel); const r = e.getBoundingClientRect(); await T.click(e, { dx: r.width - 2, dy: Math.min(12, r.height / 2) }); }
 
-T.test("an empty lecture offers Draft notes and Blank doc; a blank doc is named and saved", async () => {
+T.test("an empty lecture offers Draft notes in the capsule; + makes a blank doc that is named and saved", async () => {
   await T.openDocs();
-  T.ok($("dcDraft") && $("dcBlank"), "both buttons");
+  T.ok(/No docs yet/.test($("docEmpty").textContent), "says there are none");
+  T.ok($("draftBtn").classList.contains("hl") && !$("draftBtn").disabled, "Draft notes is the highlighted action");
+  T.eq($("docName").textContent, "No docs");
   await T.shot("docs-empty");
-  await T.click("#dcBlank");
+  await T.click("#docNew");
   await T.until(() => Docs.doc && document.activeElement === $("docTitle"), "the new doc opens with its title focused");
   T.eq(T.sent("docCreate").length, 1);
   await T.type("My notes"); await T.key("Enter");
   await T.until(() => T.sent("docRename").length === 1, "renamed");
   await T.until(() => Docs.doc.endsWith("/My notes.md"), "the doc follows its new name");
-  T.eq($("docSel").selectedOptions[0].text, "My notes");
+  T.eq($("docName").textContent, "My notes", "the capsule names the open doc");
   await T.type("Hello world");
   await T.saved("Hello world\n", "typed text is saved by itself");
   await T.until(() => $("docSavedTxt").textContent === "Saved", "shows Saved");
@@ -197,27 +199,43 @@ T.test("a checklist item is ticked by clicking its box", async () => {
   await T.saved("- [x] buy milk\n");
 });
 
-T.test("Draft notes sends the suggestion, shows progress and opens Claude's doc", async () => {
+const shown = (id) => getComputedStyle($(id)).display !== "none";
+
+T.test("Draft notes opens the composer; Enter sends the suggestion, the capsule shows progress, Claude's doc opens", async () => {
   await T.openDocs();
-  await T.click("#docHint"); await T.type("focus on the lab");
   await T.click("#draftBtn");
+  await T.until(() => shown("composer") && document.activeElement === $("hintIn"), "the composer opens, ready to type");
+  T.ok(!shown("capsule"), "it replaces the capsule");
+  T.eq($("cmpGoTxt").textContent, "Draft notes");
+  await T.type("focus on the lab");
+  await T.shot("docs-composer");
+  await T.key("Enter");
   const m = T.sent("docDraft")[0];
   T.eq([m.path, m.hint, m.model], [T.PATH, "focus on the lab", "sonnet"]);
-  T.ok(/writing notes/.test($("docStatus").textContent) && $("draftBtn").disabled, "busy");
+  T.ok(shown("capProg") && /writing notes/.test($("progTxt").textContent) && !shown("composer"), "the capsule shows the progress");
   await T.shot("docs-drafting");
   const p = T.addDoc("Gradient descent", "## Idea [0:06](#t=00:00:06)\n\nWe minimise a loss.\n");
   T.fire({ type: "docDrafted", path: T.PATH, doc: p, docs: [{ name: "Gradient descent", path: p }] });
   await T.until(() => Docs.doc === p && body().textContent.includes("We minimise"), "Claude's doc opens");
   T.eq($("docTitle").value, "Gradient descent");
-  T.eq($("docHint").value, "", "the suggestion is cleared");
-  T.ok(!$("draftBtn").disabled, "ready again");
+  T.ok(shown("capsule") && !shown("capProg") && !$("draftBtn").disabled, "ready again");
+  await T.click("#draftBtn");
+  T.eq($("hintIn").value, "", "the suggestion was used up");
 });
 
-T.test("Delete asks, then moves the doc to the Trash", async () => {
+T.test("the doc menu switches doc; Move to Trash asks, then moves the doc to the Trash", async () => {
   T.addDoc("Old", "x\n"); T.addDoc("Keep", "y\n");
   await T.openDocs();
   await T.until(() => Docs.doc.endsWith("Keep.md"), "the newest doc opens");
-  await T.click("#docDel");
+  await T.click("#docMenuBtn");
+  T.eq([...$("docMenu").querySelectorAll("[data-open] .t")].map((e) => e.textContent), ["Old", "Keep"]);
+  await T.shot("docs-menu");
+  await T.click('#docMenu [data-open="0"]');
+  await T.until(() => Docs.doc.endsWith("Old.md") && $("docName").textContent === "Old", "Old opens");
+  await T.click("#docMenuBtn"); await T.click('#docMenu [data-open="1"]');
+  await T.until(() => Docs.doc.endsWith("Keep.md"), "back to Keep");
+  await T.click("#docMenuBtn");
+  await T.click('#docMenu [data-act="trash"]');
   T.ok($("ask").classList.contains("on") && /Trash/.test($("askMsg").textContent), "asks first");
   await T.click("#askYes");
   await T.until(() => Docs.doc && Docs.doc.endsWith("Old.md"), "the other doc opens");
@@ -225,22 +243,71 @@ T.test("Delete asks, then moves the doc to the Trash", async () => {
   T.eq(T.sent("docSave").length, 0, "nothing written back to the deleted doc");
 });
 
-T.test("Make slides sends the suggestion typed beside it", async () => {
+T.test("Make slides opens the composer and sends the suggestion; Esc closes it without sending", async () => {
   await T.open();
-  await T.click("#slideHint"); await T.type("more diagrams");
+  T.eq($("slidesNew").textContent, "· 8 new lines", "how much is new");
   await T.click("#slidesBtn");
-  T.eq(T.sent("slides")[0].hint, "more diagrams");
+  await T.until(() => document.activeElement === $("hintIn"), "composer");
+  T.ok(/00:00:00 → 00:00:58/.test($("cmpInfo").textContent), $("cmpInfo").textContent);
+  await T.type("more"); await T.key("Escape");
+  T.ok(!shown("composer") && shown("capsule"), "closed");
+  T.eq(T.sent("slides").length, 0);
+  await T.click("#slidesBtn");
+  T.eq($("hintIn").value, "more", "the text is kept until sent");
+  await T.type(" diagrams");
+  await T.shot("slides-composer");
+  await T.click("#cmpGo");
+  T.eq(T.sent("slides").map((m) => [m.mode, m.hint]), [["next", "more diagrams"]]);
 });
 
-T.test("Claude's model and reasoning are in Settings, shared by slides and docs", async () => {
+T.test("Stop cancels Claude's job; the capsule comes back and no error is shown", async () => {
   await T.open();
-  await T.click("#slideBar .dock-model");
-  T.ok($("setView").style.display !== "none", "the model label opens Settings");
+  await T.key("Enter", ["cmd", "shift"]);
+  T.eq(T.sent("slides").map((m) => m.hint), [""], "⇧⌘↩ makes slides straight away");
+  await T.until(() => shown("capProg"), "progress");
+  await T.wait(1400);
+  T.ok(/making slides from 8 new lines/.test($("progTxt").textContent) && /^0:0[12]$/.test($("progTime").textContent), $("progTxt").textContent + " " + $("progTime").textContent);
+  await T.click("#capStop");
+  T.eq(T.sent("cancel").map((m) => m.kind), ["slides"]);
+  T.fire({ type: "slidesError", path: T.PATH, message: "Stopped." });
+  await T.until(() => shown("capsule") && !shown("capProg"), "the capsule is back");
+  T.ok(!document.querySelector(".toast.err"), "not shown as an error");
+});
+
+T.test("a draft running on the Docs tab shows as a dot there while you're on Slides", async () => {
+  await T.openDocs();
+  await T.click("#draftBtn"); await T.key("Enter");
+  await T.click("#tabSlides");
+  T.ok($("docsBtn").classList.contains("job") && shown("capsule"), "dot on Docs; the Slides capsule is free");
+  await T.click("#docsBtn");
+  T.ok(shown("capProg"), "progress on Docs");
+  await T.click("#capStop");
+  T.eq(T.sent("cancel").map((m) => m.kind), ["draft"]);
+});
+
+T.test("⋯ opens Settings as a sheet over the card; the model set there is the composer's", async () => {
+  await T.open();
+  await T.click("#moreBtn");
+  await T.shot("more-menu");
+  await T.click("#setBtn");
+  T.ok(shown("setView") && !shown("capsule") && !$("moreMenu").classList.contains("open"), "the Settings sheet covers the card");
   await T.click($("aiModel").picker);
   await T.click([...document.querySelectorAll(".pk-opt")].find((o) => o.textContent === "Opus"));
-  T.eq([...document.querySelectorAll(".dockModelTxt")].map((e) => e.textContent.split(",")[0]), ["Opus", "Opus"]);
-  T.ok(!$("moreMenu").querySelector("select"), "no longer in the ▾ menu");
   await T.shot("settings-claude");
+  await T.click("#themeNew");
+  T.ok(shown("themePage") && document.activeElement === $("themeName"), "New theme is a page of its own");
+  await T.click("#setBack");
+  await T.click("#setView .sh-done");
+  T.ok(!shown("setView") && shown("capsule"), "Done goes back");
+  await T.click("#slidesBtn");
+  T.eq($("cmpModel").textContent, "Opus · Low");
+  await T.click("#cmpModel");
+  await T.click('#modelMenu [data-sel="effort"][data-v="high"]');
+  T.eq([$("effort").value, $("cmpModel").textContent], ["high", "Opus · High"], "the chip changes the shared setting");
+  await T.key(",", ["cmd"]);
+  T.ok(shown("setView"), "⌘, opens Settings");
+  await T.key("Escape"); await T.key("Escape");
+  T.ok(!shown("setView"), "Esc closes it");
 });
 
 T.test("docs can be written while recording", async () => {

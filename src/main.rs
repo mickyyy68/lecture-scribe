@@ -229,11 +229,15 @@ fn main() {
                     let (model, effort) = (s("model"), s("effort"));
                     let (lang, hint) = (s("lang"), s("hint"));
                     std::thread::spawn(move || {
-                        let r = slides::generate(&path, &course, mode, &model, &effort, &lang, &hint);
+                        let r = slides::job("slides", || slides::generate(&path, &course, mode, &model, &effort, &lang, &hint));
                         SLIDES_BUSY.store(false, Ordering::SeqCst);
                         let ev = r.unwrap_or_else(|e| json!({ "type": "slidesError", "message": e, "path": path.to_string_lossy() }));
                         let _ = proxy.send_event(ev.to_string());
                     });
+                }
+                // Stop: kills the Claude Code run of a job; its thread then reports "Stopped.".
+                "cancel" => {
+                    slides::cancel(&s("kind"));
                 }
                 "slidesState" | "slidesUndo" => {
                     let path = PathBuf::from(s("path"));
@@ -249,7 +253,7 @@ fn main() {
                     }
                     let (path, course, model, effort, proxy) = (PathBuf::from(s("path")), s("course"), s("model"), s("effort"), ipc_proxy.clone());
                     std::thread::spawn(move || {
-                        let r = transcribe_lecture::check::check(&path, &course, &model, &effort);
+                        let r = slides::job("check", || transcribe_lecture::check::check(&path, &course, &model, &effort));
                         CHECK_BUSY.store(false, Ordering::SeqCst);
                         let ev = r.unwrap_or_else(|e| json!({ "type": "checkError", "message": e, "path": path.to_string_lossy() }));
                         let _ = proxy.send_event(ev.to_string());
@@ -314,7 +318,7 @@ fn main() {
                     }
                     let (path, course, model, effort, lang, hint, proxy) = (PathBuf::from(s("path")), s("course"), s("model"), s("effort"), s("lang"), s("hint"), ipc_proxy.clone());
                     std::thread::spawn(move || {
-                        let r = docs::draft(&path, &course, &model, &effort, &lang, &hint);
+                        let r = slides::job("draft", || docs::draft(&path, &course, &model, &effort, &lang, &hint));
                         DRAFT_BUSY.store(false, Ordering::SeqCst);
                         let ev = r.unwrap_or_else(|e| json!({ "type": "docDraftError", "message": e, "path": path.to_string_lossy() }));
                         let _ = proxy.send_event(ev.to_string());

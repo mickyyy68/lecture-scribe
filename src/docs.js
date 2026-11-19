@@ -844,20 +844,32 @@ const Docs = (() => {
 
     $("docTitle").addEventListener("keydown", (e) => { if (e.key === "Enter" || (e.key === "ArrowDown")) { e.preventDefault(); const f = B().firstElementChild; if (f && isText(f)) caretIn(f, 0); else B().focus(); } });
     $("docTitle").addEventListener("change", () => rename($("docTitle").value));
-    $("docSel").onchange = () => { const p = $("docSel").value; if (p && p !== doc) { saveNow(); open(p); } };
     $("docNew").onclick = () => newDoc();
-    $("docDel").onclick = async () => {
-      if (!doc) return;
-      if (!await ask(`Move “${name}” to the Trash? You can put it back from the Trash in Finder.`, "Move to Trash")) return;
-      const d = doc; clearTimeout(saveTimer); saved = serialize(); doc = null;
-      send("docDelete", { path: lect, doc: d });
+    $("draftBtn").onclick = () => openComposer("draft");
+    $("docMenuBtn").onclick = () => togglePop($("docMenu"), $("docMenuBtn"), fillMenu);
+    $("docMenu").onclick = (e) => {
+      const b = e.target.closest("button"); if (!b) return;
+      closePops();
+      if (b.dataset.open) { const p = list[+b.dataset.open]?.path; if (p && p !== doc) { saveNow(); open(p); } return; }
+      ({ new: newDoc, rename: () => { $("docTitle").focus(); $("docTitle").select(); }, reveal: () => send("reveal", { path: doc }),
+        draft: () => openComposer("draft"), trash })[b.dataset.act]?.();
     };
-    $("draftBtn").onclick = () => draft();
-    $("docsView").addEventListener("click", (e) => {
-      if (e.target.id === "dcDraft") draft();
-      if (e.target.id === "dcBlank") newDoc();
-    });
-    $("docHint").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); draft(); } });
+  }
+  // The doc menu (the doc's name in the capsule): switch doc, new, rename, Finder, draft, Trash.
+  function fillMenu() {
+    const ic = (n) => `<svg class="ic"><use href="#i-${n}"/></svg>`, m = $("docMenu");
+    m.innerHTML = (list.length ? `<div class="lab">This lecture's docs</div>` + list.map((d, i) => `<button data-open="${i}"><span class="ok">${d.path === doc ? OK_SVG : ""}</span><span class="t"></span></button>`).join("") + "<hr>" : "") +
+      `<button data-act="new">${ic("plus")}New blank doc</button>` +
+      (doc ? `<button data-act="rename">${ic("pen")}Rename</button><button data-act="reveal">${ic("finder")}Show in Finder</button>` : "") +
+      `<button data-act="draft"${$("draftBtn").disabled ? " disabled" : ""}><span class="claude-mark" style="width:17px;height:17px">${CLAUDE_SVG}</span>Draft notes with Claude…</button>` +
+      (doc ? `<hr><button data-act="trash" class="dz">${ic("trash")}Move to Trash</button>` : "");
+    m.querySelectorAll("[data-open] .t").forEach((t, i) => { t.textContent = list[i].name; });
+  }
+  async function trash() {
+    if (!doc) return;
+    if (!await ask(`Move “${name}” to the Trash? You can put it back from the Trash in Finder.`, "Move to Trash")) return;
+    const d = doc; clearTimeout(saveTimer); saved = serialize(); doc = null;
+    send("docDelete", { path: lect, doc: d });
   }
 
   function pasteBlocks(b, text) {
@@ -901,10 +913,10 @@ const Docs = (() => {
     requestAnimationFrame(fitCharts);
     if (focusNext) { focusNext = false; $("docTitle").focus(); }
   }
-  function draft() {
+  function draft(hint = "") {
     if (!lect || drafting || $("draftBtn").disabled) return;
-    drafting = true; draftErr = "";
-    send("docDraft", { path: lect, course: $("course").value, model: $("aiModel").value, effort: $("effort").value, lang: slideLangCode(), hint: $("docHint").value.trim() });
+    drafting = true; draftErr = ""; jobStart.draft = Date.now();
+    send("docDraft", { path: lect, course: $("course").value, model: $("aiModel").value, effort: $("effort").value, lang: slideLangCode(), hint });
     render();
   }
   function lecture(p) {
@@ -918,8 +930,10 @@ const Docs = (() => {
     if (e.type === "docDrafted" || e.type === "docDraftError") {
       drafting = false;
       if (e.path !== lect) { if (e.type === "docDrafted") toast("Notes are ready in the lecture's Docs folder"); render(); return; }
-      if (e.type === "docDraftError") { draftErr = e.message; toast(e.message, true); return render(); }
-      $("docHint").value = "";
+      if (e.type === "docDraftError") {
+        if (e.message === STOPPED) toast("Stopped: no doc was written"); else { draftErr = e.message; toast(e.message, true); }
+        return render();
+      }
       list = e.docs;
       const nm = e.doc.split("/").pop().replace(/\.md$/, "");
       const busy = doc && B().contains(document.activeElement);
@@ -947,33 +961,28 @@ const Docs = (() => {
     render();
   }
   function render() {
-    const sel = $("docSel"), key = JSON.stringify(list);
-    if (sel.dataset.key !== key) { sel.dataset.key = key; sel.innerHTML = ""; for (const d of list) sel.add(new Option(d.name, d.path)); }
-    if (sel.value !== (doc || "")) sel.value = doc || "";
-    $("docHead").style.display = lect && list.length ? "" : "none";
-    $("docDel").disabled = !doc;
+    $("docName").textContent = doc ? name || "Untitled" : list.length ? "Choose a doc" : "No docs";
+    $("docMenuBtn").disabled = !lect;
+    $("docNew").disabled = !lect;
     $("docPage").style.display = doc ? "" : "none";
     B().contentEditable = doc ? "true" : "false";
     const em = $("docEmpty");
     em.style.display = doc || (lect && list.length) ? "none" : "";
-    if (!lect) em.innerHTML = "Docs about the lecture you're recording or have open go here: your notes, summaries, exercises.";
-    else if (!list.length) em.innerHTML = `No docs for this lecture yet.<div class="dc-start"><button id="dcDraft" class="go">Draft notes with Claude</button><button id="dcBlank">Blank doc</button></div><span class="dc-sub">${esc(engName())} writes study notes of the whole lecture into a new doc: sections, time links, tables, formulas and diagrams, only from what was said. Add a suggestion below if you like.</span>`;
-    bar();
-    $("docNew").disabled = !lect;
-    const st = $("docStatus");
-    st.innerHTML = drafting ? `<span class="new">${esc(engName())} is writing notes for the whole lecture… (a few minutes)</span>` : draftErr ? `<span class="err"></span>` : "";
-    if (!drafting && draftErr) st.firstChild.textContent = draftErr;
-    $("docProg").classList.toggle("on", drafting);
+    const icon = '<svg class="ic"><use href="#i-doc"/></svg>';
+    if (!lect) em.innerHTML = `${icon}<h2>Docs</h2>Docs about the lecture you're recording or have open go here: your notes, summaries, exercises.`;
+    else if (!list.length) em.innerHTML = `${icon}<h2>No docs yet</h2>Let ${esc(engName())} draft study notes of the whole lecture, or start a blank doc with <b>+</b>. Every doc is a Markdown file next to the lecture.`;
     if (!doc) $("docSavedTxt").textContent = "";
+    bar();
   }
 
   // The Draft button needs lines to work from: updated on every page render.
   function bar() {
     const noText = !segs.length;
-    if ($("dcDraft")) $("dcDraft").disabled = drafting || noText;
     $("draftBtn").disabled = !lect || drafting || noText;
+    $("draftBtn").classList.toggle("hl", !!lect && !list.length && !noText && !drafting);
+    if (typeof renderCapsule === "function") renderCapsule();
   }
 
   bind();
-  return { bar, lecture, on, render, saveNow, fitCharts, parse, serialize, get doc() { return doc; }, get drafting() { return drafting; } };
+  return { bar, lecture, on, render, saveNow, fitCharts, parse, serialize, draft, get doc() { return doc; }, get drafting() { return drafting; } };
 })();

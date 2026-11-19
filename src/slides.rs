@@ -536,6 +536,57 @@ pub fn claude_command(model: &str, effort: &str, dir: &Path) -> Result<Command, 
     Ok(cmd)
 }
 
+/// The message of a Claude Code run the student stopped.
+pub const STOPPED: &str = "Stopped.";
+
+// Stop: each kind of job ("slides", "draft", "check") runs one at a time on its own thread.
+// `job` names the thread's job; `run_claude` records the pid of its claude process under that
+// name, so `cancel` can kill it. A job that ends in an error after a cancel reports STOPPED.
+std::thread_local! { static JOB: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) }; }
+#[derive(Default)]
+struct Job {
+    pid: Option<u32>,
+    cancelled: bool,
+}
+fn jobs() -> std::sync::MutexGuard<'static, std::collections::HashMap<String, Job>> {
+    static JOBS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Job>>> = std::sync::OnceLock::new();
+    JOBS.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Runs `f` as the job `kind` on this thread, so `cancel(kind)` can stop its Claude Code run.
+pub fn job<T>(kind: &str, f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    jobs().insert(kind.to_string(), Job::default());
+    JOB.with(|j| *j.borrow_mut() = Some(kind.to_string()));
+    let r = f();
+    JOB.with(|j| *j.borrow_mut() = None);
+    let cancelled = jobs().remove(kind).is_some_and(|j| j.cancelled);
+    match r {
+        Err(_) if cancelled => Err(STOPPED.to_string()),
+        r => r,
+    }
+}
+
+/// Stops the job `kind`: kills its claude process if one is running, and marks it so it doesn't
+/// start one later. Returns whether such a job was running.
+pub fn cancel(kind: &str) -> bool {
+    let mut js = jobs();
+    let Some(j) = js.get_mut(kind) else { return false };
+    j.cancelled = true;
+    if let Some(pid) = j.pid {
+        let _ = Command::new("kill").arg(pid.to_string()).status();
+    }
+    true
+}
+
+/// Records the claude process of this thread's job. Returns false if the job was already stopped.
+fn track(pid: Option<u32>) -> bool {
+    let Some(kind) = JOB.with(|j| j.borrow().clone()) else { return true };
+    let mut js = jobs();
+    let Some(j) = js.get_mut(&kind) else { return true };
+    j.pid = pid;
+    !j.cancelled
+}
+
 /// Kills `pid` after `secs` unless the returned flag is set first.
 fn kill_after(pid: u32, secs: u64) -> std::sync::Arc<std::sync::atomic::AtomicBool> {
     let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -592,6 +643,9 @@ pub(crate) fn run_claude(system: &str, user: &str, course: &str, material: bool,
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Claude Code won't start: {e}"))?;
+    if !track(Some(child.id())) {
+        let _ = child.kill();
+    }
     // The prompt goes in through stdin (it can be longer than a command line allows).
     let fed = child.stdin.take().unwrap().write_all(user.as_bytes());
     let mut stderr = child.stderr.take().unwrap();
@@ -633,6 +687,7 @@ pub(crate) fn run_claude(system: &str, user: &str, course: &str, material: bool,
         }
     }
     let _ = child.wait();
+    track(None);
     done.store(true, std::sync::atomic::Ordering::SeqCst);
     let err = err_reader.join().unwrap_or_default();
     let _ = std::fs::remove_dir_all(&dir);
@@ -1001,6 +1056,33 @@ pub fn lines_payload(text: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Stop kills the job's process; the job then reports STOPPED, and a finished job can't be stopped.
+    #[test]
+    fn cancel_stops_a_running_job() {
+        let h = std::thread::spawn(|| {
+            job("test-cancel", || {
+                let mut c = Command::new("sleep").arg("30").spawn().map_err(|e| e.to_string())?;
+                if !track(Some(c.id())) {
+                    let _ = c.kill();
+                }
+                let st = c.wait().map_err(|e| e.to_string())?;
+                track(None);
+                if st.success() { Ok(()) } else { Err("killed".to_string()) }
+            })
+        });
+        let t = std::time::Instant::now();
+        while !jobs().get("test-cancel").is_some_and(|j| j.pid.is_some()) {
+            assert!(t.elapsed().as_secs() < 5, "the job never started");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(cancel("test-cancel"));
+        assert_eq!(h.join().unwrap(), Err(STOPPED.to_string()));
+        assert!(t.elapsed().as_secs() < 5, "killed, not waited for");
+        assert!(!cancel("test-cancel"));
+        // A job that succeeds keeps its result even if Stop came too late.
+        assert_eq!(job("test-ok", || Ok::<_, String>(1)), Ok(1));
+    }
 
     /// Every block type the prompt allows, including plain-string list items and a stray
     /// string block, must go through the fact check without panicking.

@@ -17,6 +17,12 @@
   --radius: 0px;
   --radius-xl: 4px;
   --radius-dot: 50%;
+  /* The app window's right side: its card, the capsule and pill switches, menus, settings groups, small controls. */
+  --radius-panel: 16px;
+  --radius-pill: 999px;
+  --radius-menu: 12px;
+  --radius-group: 12px;
+  --radius-control: 7px;
   --stroke-hairline: 1px;
   --stroke-strong: 3px;
   --background: oklch(0.985 0.003 95);

@@ -32,9 +32,9 @@ The app is signed ad hoc, so it runs only on the Mac that built it. Set `SIGN_ID
 
 On first launch a short setup walks you through it: downloading the speech model, testing the microphone, checking Claude Code, choosing the course, languages and theme, and setting the slide style. You can open it again from **Settings → Open setup**.
 
-1. Pick the lecture's language and the microphone. Type a title if you like, then press **Start** (⌘↩).
+1. Pick the lecture's language and the microphone. Type a title and the course name beside it if you like, then press **Start** (⌘↩).
 2. The transcript fills the left side as each sentence ends. It is saved continuously to `~/Documents/Lecture Transcripts/<date> <title>.md`, so a crash loses nothing. Tick **Also save audio** to keep a `.wav` next to it.
-3. On the right, type the course name at the top. Press **Make slides** (⇧⌘↩) at the bottom whenever you want. To steer it, type a suggestion in the box beside it first ("more diagrams", "skip the recap"); it goes with that click only, and never overrides the rule that slides hold only what was said. The Claude model and reasoning are in **Settings** (click the model name beside the button); the **▾** menu holds the other slide tools. Click a slide's time range to jump to that part of the transcript.
+3. The right side is a card with two tabs, **Slides** and **Docs**. A bar floating at its bottom holds the tab's actions. On Slides, **Make slides** shows how much is new since the last time; click it whenever you want. A box opens for an optional suggestion ("more diagrams", "skip the recap"): it goes with that request only, and never overrides the rule that slides hold only what was said. Press Enter to send, or Esc to close. **⇧⌘↩** makes slides straight away. The chip in that box sets the Claude model and reasoning, the same ones as in Settings. While Claude works the bar shows its progress and **Stop**, which cancels the request and saves nothing. The slide count opens a list to jump to a slide. Click a slide's time range to jump to that part of the transcript.
 4. **Present** opens the deck in your browser: press P to present, use ← → to move, and ⌘P to print a PDF.
 5. Open a past lecture from the menu at the bottom to read it, make slides for it, or press **Continue** to record more into it.
 
@@ -48,15 +48,15 @@ This works during a recording too: new lines keep arriving at the end while you 
 
 ### Checking the transcript with Claude
 
-**Check transcript** (in the **▾** menu next to Make slides) has Claude proofread the whole lecture for recognition errors: misheard terms, names, commands and acronyms ("un dip" → "UDP", "giostname" → "hostname"). It only restores what was said, and never rewrites, shortens or adds. The proposed fixes appear in the **Glossary** tab as before → after, and their lines get a wavy underline in the transcript. Accept or skip each one, or all at once. Nothing changes until you accept. A line you edited since the check is left alone.
+**Check transcript** (in the **⋯** menu) has Claude proofread the whole lecture for recognition errors: misheard terms, names, commands and acronyms ("un dip" → "UDP", "giostname" → "hostname"). It only restores what was said, and never rewrites, shortens or adds. The proposed fixes appear in the **Glossary** (from the **⋯** menu, which shows a dot while fixes wait) as before → after, and their lines get a wavy underline in the transcript. Accept or skip each one, or all at once. Nothing changes until you accept. A line you edited since the check is left alone.
 
-Claude also proposes new glossary corrections for errors likely to come back. Accept them and they're fixed live in the course's next lectures. It uses the model from Settings, at least at High reasoning: a 30-minute lecture takes about three minutes. It works during a recording too.
+Claude also proposes new glossary corrections for errors likely to come back. Accept them and they're fixed live in the course's next lectures. It uses the model from Settings, at least at High reasoning: a 30-minute lecture takes about three minutes, and **Stop** cancels it. It works during a recording too.
 
 ### Docs
 
-The **Docs** tab holds your own documents about the lecture: notes, summaries, exercises. A lecture can have several; pick one at the top, or add one with **+ New doc**. Its name is the big title above it. **Delete** moves a doc to the Trash, so you can put it back from Finder. Docs are saved as you type, and you can write in them while a lecture is recording.
+The **Docs** tab holds your own documents about the lecture: notes, summaries, exercises. A lecture can have several. Click the doc's name in the bar at the bottom to switch doc, rename it, show it in Finder, or **Move to Trash** (you can put it back from Finder); **+** adds a blank one. Its name is the big title above it. Docs are saved as you type, and you can write in them while a lecture is recording.
 
-- **Draft notes** (at the bottom) has Claude write study notes of the whole lecture into a new doc it names: sections in lecture order, each with a link to its moment, plus tables, formulas and diagrams where the professor gave them. As with slides, it only writes what was said. Type a suggestion beside the button first if you like ("focus on the lab", "more examples"). It uses the model from Settings, at least at High reasoning, and takes a few minutes. It never overwrites a doc.
+- **Draft notes** (in the bar at the bottom) has Claude write study notes of the whole lecture into a new doc it names: sections in lecture order, each with a link to its moment, plus tables, formulas and diagrams where the professor gave them. As with slides, it only writes what was said. A box opens for an optional suggestion ("focus on the lab", "more examples"). It uses the model from Settings, at least at High reasoning, and takes a few minutes; **Stop** cancels it. It never overwrites a doc.
 - **Writing** works like Notion. Type `# ` for a heading, `- ` or `1. ` for a list, `[] ` for a checklist, `> ` for a quote, ```` ``` ```` then Enter for code, `$$` then Enter for a formula, and `---` for a divider. Type `/` for the insert menu: headings, lists, table, code, formula, image, chart, divider, time link. Select text for bold, italic, strikethrough, code and link (⌘B, ⌘I, ⇧⌘X, ⌘E, ⌘K). Tab indents list items and moves between table cells. ⌘Z undoes.
 - **Images**: paste or drag them in, or use `/Image`. **Formulas** are LaTeX, drawn with KaTeX; click one to edit it. **Charts** are a slide diagram (bars, plot, graph, sequence, network, sketch, timeline…) written as JSON; click one to edit it. **Time links** like `12:40` show that moment in the transcript.
 
@@ -64,10 +64,9 @@ Each doc is a plain Markdown file in a folder next to the lecture, `<lecture> ·
 
 ### Slide tools
 
-Rebuild deck, Review cards and Undo last are in the **▾** menu next to Make slides. Glossary and Settings are tabs at the top of the slide panel.
+Rebuild deck, Review cards and Undo last are in the **⋯** menu at the right end of the bar, with Glossary, Settings (⌘,), text size, Copy transcript and Open lectures folder. Glossary and Settings open over the card; **Done** or Esc closes them.
 
-
-- **Rebuild deck** makes the whole deck again from the full lecture, more carefully.
+- **Rebuild deck** makes the whole deck again from the full lecture, more carefully. Like Review cards, it takes a suggestion first.
 - **Review cards** adds 6–12 exam-style questions at the end. The answers stay hidden until you click them.
 - **Undo last** removes what the last click added.
 - **Glossary.** Speech models mishear technical terms, and Parakeet can't be given a word list. So each time slides are made, the model also reports misheard words ("HCB" → "DHCP") and the course's key terms. They're saved per course and fixed live in later transcripts. Remove a wrong entry with ×.
@@ -80,7 +79,7 @@ Rebuild deck, Review cards and Undo last are in the **▾** menu next to Make sl
 - **Language.** This sets the language of slides, review cards and drafted notes. By default it follows the lecture's language, so you can transcribe a lecture in one language and study it in another.
 - **Theme.** Themes set the colours and fonts of the slides, the exported decks and the app window, in light and dark mode.
   - A theme is a small CSS file in `~/Library/Application Support/Transcribe Lecture/themes/` that overrides the tokens in [`src/theme/default.css`](src/theme/default.css).
-  - **New theme with Claude Code:** describe what you want, such as "navy and gold like my university's site example.edu, serif titles", and Claude Code writes the theme. It can read a website you name to take its colours.
+  - **New theme with Claude** (its own page in Settings): describe what you want, such as "navy and gold like my university's site example.edu, serif titles", and Claude Code writes the theme. It can read a website you name to take its colours.
   - From Terminal: `transcribe-lecture --make-theme "My university" "navy and gold, serif titles"`.
   - You can also edit a theme file by hand, or drop in your own.
 
