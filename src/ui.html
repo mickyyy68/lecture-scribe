@@ -1119,14 +1119,14 @@ function renderGloss() {
     mat.map((f, i) => `<div class="g-row m-row"><span class="c"></span><span class="pg">${f.pages} pages${f.emptyPages ? ` (${f.emptyPages} without text)` : ""}</span><button class="g-x" data-k="material" data-i="${i}" title="Remove">×</button></div>`).join("") +
     `<button id="matAdd" ${matBusy ? "disabled" : ""}>${matBusy ? "Reading PDF…" : "Add PDF…"}</button></div>` +
     `<div class="g-sec"><h3>Corrections · ${n}</h3><p class="hint" id="corrHint"></p>` +
-    (n ? gloss.corrections.map((c, i) => `<div class="g-row"><span class="h"></span><span class="a">→</span><span class="c"></span><button class="g-x" data-k="correction" data-i="${i}" title="Remove">×</button></div>`).join("")
+    (n ? gloss.corrections.map((c, i) => `<div class="g-row g-corr"><span class="h"></span><span class="a">→</span><span class="c"></span><button class="g-x" data-k="correction" data-i="${i}" title="Remove">×</button></div>`).join("")
        : `<p class="hint">None yet. The AI adds them each time you press Make slides.</p>`) +
     `</div><div class="g-sec"><h3>Course terms · ${gloss.terms.length}</h3><p class="hint">Sent to the AI with every request, so it recognises them.</p><div class="g-terms">` +
     gloss.terms.map((t, i) => `<span class="g-term"><span></span><button class="g-x" data-k="term" data-i="${i}" title="Remove">×</button></span>`).join("") + `</div></div>`;
   $("matHint").textContent = `PDFs for ${course} (slides, lab handouts). The AI searches them to spell commands and terms right and to point you to pages, shown in the notes as “Material: «file» p. 12”. Slides still contain only what the professor said. Text is read on this Mac; scanned PDFs without text aren't supported yet.`;
   v.querySelectorAll(".m-row .c").forEach((el, i) => { el.textContent = mat[i].name; });
   $("corrHint").textContent = `Misheard words that Transcribe Lecture fixes live while transcribing ${course}, from the next sentence on. Remove any that are wrong.`;
-  v.querySelectorAll(".g-row").forEach((r, i) => { r.querySelector(".h").textContent = gloss.corrections[i].heard; r.querySelector(".c").textContent = gloss.corrections[i].correct; });
+  v.querySelectorAll(".g-corr").forEach((r, i) => { r.querySelector(".h").textContent = gloss.corrections[i].heard; r.querySelector(".c").textContent = gloss.corrections[i].correct; });
   v.querySelectorAll(".g-term > span").forEach((el, i) => { el.textContent = gloss.terms[i]; });
   fillSuggest(v);
 }
