@@ -52,6 +52,25 @@ pub fn valid_correction(heard: &str, correct: &str) -> bool {
     (3..=40).contains(&heard.chars().count()) && !correct.is_empty() && !heard.contains('\n') && heard.to_lowercase() != correct.to_lowercase()
 }
 
+/// The model's suggested corrections that are safe to apply to every future lecture of the
+/// course: valid, not known yet, not repeated, and not ordinary words or phrases in the lecture's
+/// language or English (the engine would replace "interact" in every lecture). `lang` is an ISO
+/// code, or empty when unknown.
+pub fn safe_corrections(course: &str, suggested: &Value, lang: &str) -> Vec<Value> {
+    let g = load(course);
+    let mut seen: Vec<String> = g["corrections"].as_array().into_iter().flatten().filter_map(|c| c["heard"].as_str()).map(str::to_lowercase).collect();
+    let langs: Vec<&str> = ["en", lang].into_iter().filter(|l| !l.is_empty()).collect();
+    let mut out = Vec::new();
+    for c in suggested.as_array().into_iter().flatten() {
+        let (Some(heard), Some(correct)) = (c["heard"].as_str().map(str::trim), c["correct"].as_str().map(str::trim)) else { continue };
+        if valid_correction(heard, correct) && !seen.contains(&heard.to_lowercase()) && !crate::spell::ordinary(heard, &langs) {
+            seen.push(heard.to_lowercase());
+            out.push(json!({ "heard": heard, "correct": correct }));
+        }
+    }
+    out
+}
+
 /// Adds the model's suggestions; returns how many corrections and terms were new.
 pub fn merge(course: &str, suggested: &Value) -> (usize, usize) {
     let mut g = load(course);

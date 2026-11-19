@@ -50,8 +50,9 @@ pub enum Cmd {
     Pause,
     Resume,
     Stop,
-    /// A hand edit to a transcript line (see `slides::edit_body`). Goes through the engine so
-    /// the lecture being recorded, which lives in memory, gets it too.
+    /// A hand edit to the original transcript's line `i`, shown as line `vi` (see
+    /// `slides::edit_line`). Goes through the engine so the lecture being recorded, which lives
+    /// in memory, gets it too.
     EditLine { path: PathBuf, op: String, i: usize, text: String },
     /// Renames a lecture (see `rename_lecture`); refused while recording. `done` gets the new path.
     Rename { path: PathBuf, title: String, done: Box<dyn FnOnce(Result<PathBuf, String>) + Send> },
@@ -205,18 +206,9 @@ impl Worker {
     }
 
     fn edit_line(&mut self, path: &Path, op: &str, i: usize, text: &str) -> Result<(), String> {
-        let ev = match self.rec.as_mut().filter(|r| r.transcript_path == path) {
-            Some(r) => {
-                if let Some((body, shift)) = crate::slides::edit_body(&r.body, op, i, text)? {
-                    r.body = body;
-                    write_atomic(&r.transcript_path, &r.body).map_err(|e| format!("Could not save transcript: {e}"))?;
-                    crate::slides::shift_deck(path, i, shift)?;
-                }
-                crate::slides::lines_payload(&r.body)
-            }
-            None => crate::slides::edit_line(path, op, i, text)?["lines"].take(),
-        };
-        (self.emit)(Event::LineEdited { path: path.to_string_lossy().to_string(), lines: ev });
+        let body = self.rec.as_mut().filter(|r| r.transcript_path == path).map(|r| &mut r.body);
+        let lines = crate::slides::edit_line(path, body, op, i, text)?;
+        (self.emit)(Event::LineEdited { path: path.to_string_lossy().to_string(), lines });
         Ok(())
     }
 
@@ -618,9 +610,10 @@ fn file_title(title: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ").trim_start_matches('.').to_string()
 }
 
-/// The files that belong to a lecture: the transcript, its audio, the deck and the Docs folder.
-fn lecture_files(t: &Path) -> [PathBuf; 5] {
-    [t.to_path_buf(), t.with_extension("wav"), crate::slides::deck_path(t, ".json"), crate::slides::deck_path(t, ".html"), crate::docs::dir(t)]
+/// The files that belong to a lecture: the transcript, its audio, the deck, and the Docs and
+/// Versions folders.
+fn lecture_files(t: &Path) -> [PathBuf; 6] {
+    [t.to_path_buf(), t.with_extension("wav"), crate::slides::deck_path(t, ".json"), crate::slides::deck_path(t, ".html"), crate::docs::dir(t), crate::versions::dir(t)]
 }
 
 /// Renames a lecture: the title in the transcript, and its files ("2026-11-17 09.28 <title>…"),
@@ -726,12 +719,15 @@ mod tests {
         std::fs::write(&t, "# Lecture\n\n_Monday_\n\n**[00:00:01]** Hello.\n\n").unwrap();
         std::fs::write(d.join("2026-11-17 09.28 Lecture.wav"), "RIFF").unwrap();
         std::fs::write(d.join("2026-11-17 09.28 Lecture · Docs/Notes.md"), "notes").unwrap();
+        std::fs::create_dir_all(d.join("2026-11-17 09.28 Lecture · Versions")).unwrap();
+        std::fs::write(d.join("2026-11-17 09.28 Lecture · Versions/versions.json"), "{}").unwrap();
         std::fs::write(d.join("2026-11-17 09.28 Networks: DHCP.md"), "# taken").unwrap(); // not this lecture's
         let n = rename_lecture(&t, "  Networks:  DHCP ").unwrap();
         assert_eq!(n, d.join("2026-11-17 09.28 Networks- DHCP.md"));
         assert_eq!(std::fs::read_to_string(&n).unwrap(), "# Networks: DHCP\n\n_Monday_\n\n**[00:00:01]** Hello.\n\n");
         assert!(d.join("2026-11-17 09.28 Networks- DHCP.wav").exists() && !d.join("2026-11-17 09.28 Lecture.wav").exists());
         assert!(d.join("2026-11-17 09.28 Networks- DHCP · Docs/Notes.md").exists());
+        assert!(d.join("2026-11-17 09.28 Networks- DHCP · Versions/versions.json").exists());
         assert!(!t.exists());
         // Taken by another lecture's audio: the next free name.
         std::fs::write(d.join("2026-11-17 09.28 Week 2.wav"), "RIFF").unwrap();

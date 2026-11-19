@@ -46,9 +46,9 @@ pub fn parse_transcript(text: &str) -> (String, Vec<(String, String)>) {
     (title, lines)
 }
 
+/// The lecture as the app reads it: the version the student picked (see versions.rs).
 pub(crate) fn read_transcript(p: &Path) -> Result<(String, Vec<(String, String)>), String> {
-    let text = std::fs::read_to_string(p).map_err(|e| format!("Can't read the transcript: {e}"))?;
-    Ok(parse_transcript(&text))
+    crate::versions::view(p)
 }
 
 fn load_deck(t: &Path) -> Value {
@@ -291,7 +291,12 @@ pub fn generate(t: &Path, course: &str, mode: Mode, model: &str, effort: &str, l
         "usage": usage,
     }));
     save(t, &deck, &title)?;
-    let (nc, nt) = if review { (0, 0) } else { crate::glossary::merge(course, &out["glossary"]) };
+    let (nc, nt) = if review {
+        (0, 0)
+    } else {
+        let corrections = crate::glossary::safe_corrections(course, &out["glossary"]["corrections"], &code);
+        crate::glossary::merge(course, &json!({ "corrections": corrections, "terms": out["glossary"]["terms"] }))
+    };
     let mut st = state(t)?;
     st["learned"] = json!({ "corrections": nc, "terms": nt });
     st["added"] = json!(added);
@@ -539,13 +544,14 @@ pub fn claude_command(model: &str, effort: &str, dir: &Path) -> Result<Command, 
 /// The message of a Claude Code run the student stopped.
 pub const STOPPED: &str = "Stopped.";
 
-// Stop: each kind of job ("slides", "draft", "check") runs one at a time on its own thread.
+// Stop: each kind of job ("slides", "draft", "clean") runs one at a time on its own thread.
 // `job` names the thread's job; `run_claude` records the pid of its claude process under that
-// name, so `cancel` can kill it. A job that ends in an error after a cancel reports STOPPED.
+// name, so `cancel` can kill it. A job may run several claude processes at once on threads of
+// its own (`in_job`). A job that ends in an error after a cancel reports STOPPED.
 std::thread_local! { static JOB: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) }; }
 #[derive(Default)]
 struct Job {
-    pid: Option<u32>,
+    pids: Vec<u32>,
     cancelled: bool,
 }
 fn jobs() -> std::sync::MutexGuard<'static, std::collections::HashMap<String, Job>> {
@@ -566,25 +572,47 @@ pub fn job<T>(kind: &str, f: impl FnOnce() -> Result<T, String>) -> Result<T, St
     }
 }
 
-/// Stops the job `kind`: kills its claude process if one is running, and marks it so it doesn't
+/// Runs `f` on this (helper) thread as part of the job `kind` that `job` started elsewhere, so
+/// Stop also kills the claude processes it starts.
+pub fn in_job<T>(kind: &str, f: impl FnOnce() -> T) -> T {
+    JOB.with(|j| *j.borrow_mut() = Some(kind.to_string()));
+    let r = f();
+    JOB.with(|j| *j.borrow_mut() = None);
+    r
+}
+
+/// Whether the job `kind` was stopped (its helpers check before starting more work).
+pub fn cancelled(kind: &str) -> bool {
+    jobs().get(kind).is_some_and(|j| j.cancelled)
+}
+
+/// Stops the job `kind`: kills its claude processes if any are running, and marks it so it doesn't
 /// start one later. Returns whether such a job was running.
 pub fn cancel(kind: &str) -> bool {
     let mut js = jobs();
     let Some(j) = js.get_mut(kind) else { return false };
     j.cancelled = true;
-    if let Some(pid) = j.pid {
+    for pid in &j.pids {
         let _ = Command::new("kill").arg(pid.to_string()).status();
     }
     true
 }
 
-/// Records the claude process of this thread's job. Returns false if the job was already stopped.
-fn track(pid: Option<u32>) -> bool {
+/// Records a claude process of this thread's job. Returns false if the job was already stopped.
+fn track(pid: u32) -> bool {
     let Some(kind) = JOB.with(|j| j.borrow().clone()) else { return true };
     let mut js = jobs();
     let Some(j) = js.get_mut(&kind) else { return true };
-    j.pid = pid;
+    j.pids.push(pid);
     !j.cancelled
+}
+
+/// The process ended.
+fn untrack(pid: u32) {
+    let Some(kind) = JOB.with(|j| j.borrow().clone()) else { return };
+    if let Some(j) = jobs().get_mut(&kind) {
+        j.pids.retain(|&p| p != pid);
+    }
 }
 
 /// Kills `pid` after `secs` unless the returned flag is set first.
@@ -643,7 +671,8 @@ pub(crate) fn run_claude(system: &str, user: &str, course: &str, material: bool,
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("Claude Code won't start: {e}"))?;
-    if !track(Some(child.id())) {
+    let pid = child.id();
+    if !track(pid) {
         let _ = child.kill();
     }
     // The prompt goes in through stdin (it can be longer than a command line allows).
@@ -687,7 +716,7 @@ pub(crate) fn run_claude(system: &str, user: &str, course: &str, material: bool,
         }
     }
     let _ = child.wait();
-    track(None);
+    untrack(pid);
     done.store(true, std::sync::atomic::Ordering::SeqCst);
     let err = err_reader.join().unwrap_or_default();
     let _ = std::fs::remove_dir_all(&dir);
@@ -1026,31 +1055,74 @@ pub fn shift_deck(p: &Path, i: usize, shift: i64) -> Result<(), String> {
     save(p, &deck, &title)
 }
 
-/// A hand edit to a lecture that isn't being recorded (see `edit_body`), saved to its file.
-pub fn edit_line(p: &Path, op: &str, i: usize, text: &str) -> Result<Value, String> {
-    let body = std::fs::read_to_string(p).map_err(|e| format!("Can't read the transcript: {e}"))?;
-    if let Some((body, shift)) = edit_body(&body, op, i, text)? {
-        write_atomic(p, &body)?;
-        shift_deck(p, i, shift)?;
+/// After the lines changed shape some other way (another version, a clean up), each deck mark
+/// moves to the same moment of the lecture: a mark before line `n` of `before` becomes a mark
+/// before the first line of `after` that isn't earlier than it.
+pub fn remap_deck(p: &Path, before: &[(String, String)], after: &[(String, String)]) -> Result<(), String> {
+    if !deck_path(p, ".json").exists() {
+        return Ok(());
     }
-    transcript_payload(p)
+    let secs = |t: &str| t.split(':').fold(0u64, |a, x| a * 60 + x.parse::<u64>().unwrap_or(0));
+    let map = |n: usize| match before.get(n) {
+        None => after.len(),
+        Some((t, _)) => after.iter().take_while(|(u, _)| secs(u) < secs(t)).count(),
+    };
+    let mut deck = load_deck(p);
+    for b in deck["batches"].as_array_mut().into_iter().flatten() {
+        for key in ["from_line", "to_line"] {
+            if let Some(n) = b[key].as_u64() {
+                b[key] = json!(map(n as usize));
+            }
+        }
+    }
+    let (title, _) = read_transcript(p)?;
+    save(p, &deck, &title)
 }
 
-/// For opening a past lecture in the transcript pane.
+/// A hand edit to the original's line `i` (see `edit_body`), which is line `vi` of what the
+/// student sees (they differ when a clean version is shown). `body` is the original's text: the
+/// engine's for the lecture being recorded, or None to read the file. Saves it and keeps the
+/// versions and the deck in step. Returns the lines as shown.
+pub fn edit_line(p: &Path, body: Option<&mut String>, op: &str, i: usize, text: &str) -> Result<Value, String> {
+    let _l = crate::versions::lock();
+    let mut file;
+    let body = match body {
+        Some(b) => b,
+        None => {
+            file = std::fs::read_to_string(p).map_err(|e| format!("Can't read the transcript: {e}"))?;
+            &mut file
+        }
+    };
+    if let Some((b, shift)) = edit_body(body, op, i, text)? {
+        // Where the line is in the view now, not when it was edited: a version may have been
+        // picked in between.
+        let vi = crate::versions::view_index(p, i);
+        *body = b;
+        write_atomic(p, body)?;
+        crate::versions::original_edited(p, i, shift);
+        if let Some(vi) = vi {
+            shift_deck(p, vi, shift)?;
+        }
+    }
+    Ok(lines_json(&crate::versions::view_of(p, body)?.1))
+}
+
+/// For opening a lecture in the transcript pane: the version picked, and the versions there are.
 pub fn transcript_payload(p: &Path) -> Result<Value, String> {
-    let text = std::fs::read_to_string(p).map_err(|e| format!("Can't read the transcript: {e}"))?;
+    let (title, lines) = read_transcript(p)?;
     Ok(json!({
         "type": "transcript",
         "path": p.to_string_lossy(),
-        "title": parse_transcript(&text).0,
-        "lines": lines_payload(&text),
+        "title": title,
+        "lines": lines_json(&lines),
+        "versions": crate::versions::info(p),
     }))
 }
 
-/// The finished lines as `[[seconds, text], …]`, as the transcript pane takes them.
-pub fn lines_payload(text: &str) -> Value {
+/// Lines as `[[seconds, text], …]`, as the transcript pane takes them.
+pub fn lines_json(lines: &[(String, String)]) -> Value {
     let secs = |t: &str| t.split(':').fold(0u64, |a, x| a * 60 + x.parse::<u64>().unwrap_or(0));
-    json!(parse_transcript(text).1.iter().map(|(t, x)| json!([secs(t), x])).collect::<Vec<_>>())
+    json!(lines.iter().map(|(t, x)| json!([secs(t), x])).collect::<Vec<_>>())
 }
 
 #[cfg(test)]
@@ -1063,16 +1135,16 @@ mod tests {
         let h = std::thread::spawn(|| {
             job("test-cancel", || {
                 let mut c = Command::new("sleep").arg("30").spawn().map_err(|e| e.to_string())?;
-                if !track(Some(c.id())) {
+                if !track(c.id()) {
                     let _ = c.kill();
                 }
                 let st = c.wait().map_err(|e| e.to_string())?;
-                track(None);
+                untrack(c.id());
                 if st.success() { Ok(()) } else { Err("killed".to_string()) }
             })
         });
         let t = std::time::Instant::now();
-        while !jobs().get("test-cancel").is_some_and(|j| j.pid.is_some()) {
+        while !jobs().get("test-cancel").is_some_and(|j| !j.pids.is_empty()) {
             assert!(t.elapsed().as_secs() < 5, "the job never started");
             std::thread::sleep(std::time::Duration::from_millis(20));
         }
@@ -1101,17 +1173,17 @@ mod tests {
         let p = dir.join("L.md");
         std::fs::write(&p, "# L\n\n_date_\n\n**[00:00:01]** a\n\n**[00:00:05]** b\n\n_Continued_\n\n**[00:01:00]** c\n\n").unwrap();
         std::fs::write(deck_path(&p, ".json"), r#"{"batches":[{"from_line":0,"to_line":2,"slides":[]}]}"#).unwrap();
-        let lines = |v: Value| v["lines"].as_array().unwrap().iter().map(|l| format!("{}:{}", l[0], l[1].as_str().unwrap())).collect::<Vec<_>>();
-        assert_eq!(lines(edit_line(&p, "set", 1, " b  fixed\n\nnow ").unwrap()), ["1:a", "5:b fixed now", "60:c"]);
-        assert_eq!(lines(edit_line(&p, "insert", 1, "mine").unwrap()), ["1:a", "1:mine", "5:b fixed now", "60:c"]);
+        let lines = |v: Value| v.as_array().unwrap().iter().map(|l| format!("{}:{}", l[0], l[1].as_str().unwrap())).collect::<Vec<_>>();
+        assert_eq!(lines(edit_line(&p, None, "set", 1, " b  fixed\n\nnow ").unwrap()), ["1:a", "5:b fixed now", "60:c"]);
+        assert_eq!(lines(edit_line(&p, None, "insert", 1, "mine").unwrap()), ["1:a", "1:mine", "5:b fixed now", "60:c"]);
         assert_eq!(load_deck(&p)["batches"][0]["to_line"], 3);
-        assert_eq!(lines(edit_line(&p, "insert", 0, "top").unwrap())[0], "1:top");
-        assert_eq!(lines(edit_line(&p, "delete", 4, "").unwrap()), ["1:top", "1:a", "1:mine", "5:b fixed now"]);
-        assert_eq!(lines(edit_line(&p, "set", 0, "").unwrap()).len(), 3);
+        assert_eq!(lines(edit_line(&p, None, "insert", 0, "top").unwrap())[0], "1:top");
+        assert_eq!(lines(edit_line(&p, None, "delete", 4, "").unwrap()), ["1:top", "1:a", "1:mine", "5:b fixed now"]);
+        assert_eq!(lines(edit_line(&p, None, "set", 0, "").unwrap()).len(), 3);
         assert_eq!(load_deck(&p)["batches"][0]["to_line"], 3);
         let body = std::fs::read_to_string(&p).unwrap();
         assert!(body.starts_with("# L\n\n_date_\n\n") && body.contains("_Continued_") && body.ends_with("\n\n"));
-        assert!(edit_line(&p, "set", 9, "x").is_err());
+        assert!(edit_line(&p, None, "set", 9, "x").is_err());
         // A recording's in-memory transcript: header only, then lines appended as they come.
         let (b, n) = edit_body("# L\n\n_date_\n\n", "insert", 0, "first").unwrap().unwrap();
         assert_eq!((b.as_str(), n), ("# L\n\n_date_\n\n**[00:00:00]** first\n\n", 1));

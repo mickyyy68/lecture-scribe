@@ -1,6 +1,6 @@
 use transcribe_lecture::engine::{self, Cmd, Event, Source, StartOpts};
 use transcribe_lecture::paths::{self, out_dir};
-use transcribe_lecture::{audio, docs, glossary, material, models, slides, theme};
+use transcribe_lecture::{audio, clean, docs, glossary, material, models, slides, spell, theme, versions};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use tao::{
@@ -28,7 +28,7 @@ fn ui() -> String {
 
 static SLIDES_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static DRAFT_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static CHECK_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static CLEAN_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static DOWNLOADING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn init_payload() -> Value {
@@ -72,19 +72,21 @@ fn main() {
         }
         return;
     }
-    // Headless: `transcribe-lecture --check file.md [--course X] [--model sonnet] [--effort low]`.
-    // A real Claude Code call; prints the proposed fixes and corrections, writes nothing.
-    if let Some(i) = args.iter().position(|a| a == "--check") {
-        let opt = |k: &str| args.iter().position(|a| a == k).map(|j| args[j + 1].clone());
-        let (course, model, effort) = (opt("--course").unwrap_or_default(), opt("--model").unwrap_or_else(|| slides::DEFAULT_MODEL.into()), opt("--effort").unwrap_or_else(|| slides::DEFAULT_EFFORT.into()));
-        match transcribe_lecture::check::check(std::path::Path::new(&args[i + 1]), &course, &model, &effort) {
-            Ok(v) => {
-                for f in v["fixes"].as_array().into_iter().flatten() {
-                    println!("#{} [{}] {}\n   - {}\n   + {}", f["i"], f["t"], f["why"].as_str().unwrap_or(""), f["old"].as_str().unwrap_or(""), f["text"].as_str().unwrap_or(""));
-                }
-                println!("\ncorrections: {}\nterms: {}\nusage: {}\nlookups: {}", v["corrections"], v["terms"], v["usage"], v["lookups"]);
-            }
-            Err(e) => eprintln!("error: {e}"),
+    // Headless: `transcribe-lecture --clean file.md [--course X] [--model sonnet] [--effort high] [--lang it]`.
+    // Real Claude Code calls; writes a clean version into "<lecture> · Versions/", so run it on a copy.
+    if let Some(i) = args.iter().position(|a| a == "--clean") {
+        let opt = |k: &str| args.iter().position(|a| a == k).map(|j| args[j + 1].clone()).unwrap_or_default();
+        let t = std::path::Path::new(&args[i + 1]);
+        let progress = |d: usize, n: usize| eprint!("\rparts {d} / {n}");
+        match clean::clean(t, &opt("--course"), &opt("--model"), &opt("--effort"), &opt("--lang"), &progress) {
+            Ok(v) => println!(
+                "\nsaved {}\nstats: {}\nsuggested corrections: {}\nusage: {}",
+                versions::dir(t).join(format!("{}.md", v["versions"]["active"].as_str().unwrap_or(""))).display(),
+                v["stats"],
+                v["suggestions"],
+                v["usage"]
+            ),
+            Err(e) => eprintln!("\nerror: {e}"),
         }
         return;
     }
@@ -222,6 +224,11 @@ fn main() {
                 // Slides: Claude Code runs on its own thread; the result comes back as an event.
                 "slides" => {
                     use std::sync::atomic::Ordering;
+                    if CLEAN_BUSY.load(Ordering::SeqCst) {
+                        let ev = json!({ "type": "slidesError", "message": "Wait for the clean up to finish.", "path": s("path") });
+                        let _ = ipc_proxy.send_event(ev.to_string());
+                        return;
+                    }
                     if SLIDES_BUSY.swap(true, Ordering::SeqCst) {
                         return;
                     }
@@ -246,21 +253,56 @@ fn main() {
                     let ev = r.unwrap_or_else(|e| json!({ "type": "slidesError", "message": e, "path": s("path") }));
                     let _ = ipc_proxy.send_event(ev.to_string());
                 }
-                // Check transcript: Claude Code proofreads the lecture; the fixes come back for review.
-                "checkTranscript" => {
+                // Clean up: Claude Code rewrites the lecture as a new version (see clean.rs), in
+                // parts; their progress comes back as they finish. Not while slides are being made:
+                // both work by line number.
+                "cleanUp" => {
                     use std::sync::atomic::Ordering;
-                    if CHECK_BUSY.swap(true, Ordering::SeqCst) {
+                    let path = PathBuf::from(s("path"));
+                    if SLIDES_BUSY.load(Ordering::SeqCst) {
+                        let ev = json!({ "type": "cleanError", "message": "Wait for the slides to finish.", "path": path.to_string_lossy() });
+                        let _ = ipc_proxy.send_event(ev.to_string());
                         return;
                     }
-                    let (path, course, model, effort, proxy) = (PathBuf::from(s("path")), s("course"), s("model"), s("effort"), ipc_proxy.clone());
+                    if CLEAN_BUSY.swap(true, Ordering::SeqCst) {
+                        return;
+                    }
+                    let (course, model, effort, lang, proxy) = (s("course"), s("model"), s("effort"), s("lang"), ipc_proxy.clone());
                     std::thread::spawn(move || {
-                        let r = slides::job("check", || transcribe_lecture::check::check(&path, &course, &model, &effort));
-                        CHECK_BUSY.store(false, Ordering::SeqCst);
-                        let ev = r.unwrap_or_else(|e| json!({ "type": "checkError", "message": e, "path": path.to_string_lossy() }));
+                        let p2 = std::sync::Mutex::new(proxy.clone());
+                        let at = path.to_string_lossy().to_string();
+                        let progress = move |done: usize, total: usize| {
+                            let _ = p2.lock().unwrap().send_event(json!({ "type": "cleanProgress", "path": at, "done": done, "total": total }).to_string());
+                        };
+                        let r = slides::job("clean", || clean::clean(&path, &course, &model, &effort, &lang, &progress));
+                        CLEAN_BUSY.store(false, Ordering::SeqCst);
+                        let ev = r.unwrap_or_else(|e| json!({ "type": "cleanError", "message": e, "path": path.to_string_lossy() }));
                         let _ = proxy.send_event(ev.to_string());
                     });
                 }
-                // Accepted from a check: corrections and terms into the course glossary.
+                // Versions: pick one (null: the original), rename, delete, compare with the original.
+                "versionSet" | "versionDelete" | "versionRename" | "versionCompare" => {
+                    use std::sync::atomic::Ordering;
+                    let (cmd, path, id) = (s("cmd"), PathBuf::from(s("path")), s("id"));
+                    let busy = SLIDES_BUSY.load(Ordering::SeqCst) || CLEAN_BUSY.load(Ordering::SeqCst);
+                    let r = match cmd.as_str() {
+                        "versionSet" | "versionDelete" if busy => Err("Wait for Claude to finish first.".to_string()),
+                        "versionSet" => versions::set_active(&path, Some(id.as_str()).filter(|i| !i.is_empty())).and_then(|_| slides::transcript_payload(&path)),
+                        "versionDelete" => versions::delete(&path, &id).and_then(|_| slides::transcript_payload(&path)),
+                        "versionRename" => versions::rename(&path, &id, &s("name")).map(|_| json!({ "type": "versions", "path": path.to_string_lossy(), "versions": versions::info(&path) })),
+                        _ => versions::compare(&path),
+                    };
+                    let ev = match r {
+                        Ok(mut v) if v["type"] == "transcript" => {
+                            v["type"] = json!("view");
+                            v
+                        }
+                        Ok(v) => v,
+                        Err(e) => json!({ "type": "versionError", "path": path.to_string_lossy(), "message": e }),
+                    };
+                    let _ = ipc_proxy.send_event(ev.to_string());
+                }
+                // Accepted from a clean up's suggestions: corrections into the course glossary.
                 "glossaryAdd" => {
                     let course = s("course");
                     glossary::merge(&course, &json!({ "corrections": msg["corrections"], "terms": msg["terms"] }));
@@ -325,20 +367,34 @@ fn main() {
                         let _ = proxy.send_event(ev.to_string());
                     });
                 }
+                // A line of a clean version is saved here; a line of the original goes through the
+                // engine, which may be recording it.
                 "lineEdit" => {
+                    let (path, op, text) = (PathBuf::from(s("path")), s("op"), s("text"));
                     let i = msg["i"].as_u64().unwrap_or(u64::MAX) as usize;
-                    let _ = tx.send(Cmd::EditLine { path: PathBuf::from(s("path")), op: s("op"), i, text: s("text") });
+                    match versions::route(&path, &op, i) {
+                        versions::Target::Version(vi) => {
+                            let ev = versions::edit(&path, &op, vi, &text)
+                                .and_then(|_| versions::view(&path))
+                                .map(|(_, l)| json!({ "type": "lineEdited", "path": path.to_string_lossy(), "lines": slides::lines_json(&l), "versions": versions::info(&path) }))
+                                .unwrap_or_else(|e| json!({ "type": "error", "message": e }));
+                            let _ = ipc_proxy.send_event(ev.to_string());
+                        }
+                        versions::Target::Original(ri) => {
+                            let _ = tx.send(Cmd::EditLine { path, op, i: ri, text });
+                        }
+                    }
                 }
                 // The lecture picker asks again each time it opens, so new lectures show up.
                 "recentList" => {
                     let _ = ipc_proxy.send_event(json!({ "type": "recent", "recent": slides::recent(&out_dir()) }).to_string());
                 }
-                // Rename: not while Claude is writing the lecture's slides, check or notes (they'd
+                // Rename: not while Claude is writing the lecture's slides, clean version or notes (they'd
                 // be written under the old name); the engine refuses while recording.
                 "renameLecture" => {
                     use std::sync::atomic::Ordering;
                     let from = s("path");
-                    let busy = [&SLIDES_BUSY, &CHECK_BUSY, &DRAFT_BUSY].iter().any(|b| b.load(Ordering::SeqCst));
+                    let busy = [&SLIDES_BUSY, &CLEAN_BUSY, &DRAFT_BUSY].iter().any(|b| b.load(Ordering::SeqCst));
                     let reply = move |r: Result<PathBuf, String>, proxy: &tao::event_loop::EventLoopProxy<String>| {
                         let ev = match r {
                             Ok(p) => slides::transcript_payload(&p).map(|mut v| {
@@ -461,11 +517,21 @@ fn main() {
         .expect("webview");
 
     let menu = app_menu();
+    // Edit → Find… / Find Next / Find Previous: the page's find bar (it also handles the keys
+    // itself, so the menu item only acts when the page didn't).
+    let menu_proxy = std::sync::Mutex::new(proxy.clone());
+    muda::MenuEvent::set_event_handler(Some(move |e: muda::MenuEvent| {
+        let action = e.id().0.clone();
+        let _ = menu_proxy.lock().unwrap().send_event(json!({ "type": "menu", "action": action }).to_string());
+    }));
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
             // NSApp exists from here on: the menu bar gives text fields Cmd-C/V/X/A/Z.
-            TaoEvent::NewEvents(tao::event::StartCause::Init) => menu.init_for_nsapp(),
+            TaoEvent::NewEvents(tao::event::StartCause::Init) => {
+                menu.init_for_nsapp();
+                spell::main_loop_started();
+            }
             TaoEvent::UserEvent(js) => {
                 let _ = webview.evaluate_script(&format!("window.onEngine({js})"));
             }
@@ -483,7 +549,9 @@ fn main() {
 /// The menu bar. Without an Edit menu, macOS doesn't send Cut, Copy, Paste, Select All and
 /// Undo to the page, so their shortcuts would do nothing in text fields and transcript lines.
 fn app_menu() -> muda::Menu {
-    use muda::{Menu, PredefinedMenuItem as P, Submenu};
+    use muda::accelerator::{Accelerator, Code, Modifiers};
+    use muda::{Menu, MenuItem, PredefinedMenuItem as P, Submenu};
+    let item = |id: &str, text: &str, mods: Modifiers| MenuItem::with_id(id, text, true, Some(Accelerator::new(mods, if id == "find" { Code::KeyF } else { Code::KeyG })));
     let menu = Menu::new();
     let app = Submenu::with_items(paths::APP_NAME, true, &[
         &P::about(None, None), &P::separator(), &P::services(None), &P::separator(),
@@ -491,7 +559,9 @@ fn app_menu() -> muda::Menu {
     ]);
     let edit = Submenu::with_items("Edit", true, &[
         &P::undo(None), &P::redo(None), &P::separator(),
-        &P::cut(None), &P::copy(None), &P::paste(None), &P::select_all(None),
+        &P::cut(None), &P::copy(None), &P::paste(None), &P::select_all(None), &P::separator(),
+        &item("find", "Find…", Modifiers::META), &item("findNext", "Find Next", Modifiers::META),
+        &item("findPrev", "Find Previous", Modifiers::META | Modifiers::SHIFT),
     ]);
     let window = Submenu::with_items("Window", true, &[&P::minimize(None), &P::fullscreen(None), &P::separator(), &P::close_window(None)]);
     for m in [app, edit, window].into_iter().flatten() {
