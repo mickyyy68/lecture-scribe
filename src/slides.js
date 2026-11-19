@@ -654,6 +654,9 @@
   }
 
   window.renderSlide = slide;
+  // Docs draw ```chart blocks and formulas with the same code (ui.html only).
+  window.renderBlocks = blocks;
+  window.renderTex = tex;
   // Speaker notes: same inline markup as the slides ($math$, `code`, **bold**, "(?)"). Escapes HTML.
   window.renderNotes = inline;
 

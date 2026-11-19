@@ -1,6 +1,6 @@
 use transcribe_lecture::engine::{self, Cmd, Event, Source, StartOpts};
 use transcribe_lecture::paths::{self, out_dir};
-use transcribe_lecture::{audio, glossary, material, models, slides, theme};
+use transcribe_lecture::{audio, docs, glossary, material, models, slides, theme};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use tao::{
@@ -19,12 +19,15 @@ fn ui() -> String {
         .replace("/*TOKENS_CSS*/", theme::DEFAULT_CSS)
         .replace("/*SLIDES_CSS*/", slides::SLIDES_CSS)
         .replace("/*SLIDES_JS*/", slides::SLIDES_JS)
+        .replace("/*DOCS_JS*/", include_str!("docs.js"))
         .replace("/*KATEX_CSS*/", slides::KATEX_CSS)
         .replace("/*KATEX_JS*/", slides::KATEX_JS)
         .replace("/*CLAUDE_SVG*/", include_str!("claude-symbol.svg").trim())
 }
 
 static SLIDES_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static DRAFT_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static CHECK_BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static DOWNLOADING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn init_payload() -> Value {
@@ -47,6 +50,10 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     // Claude Code starts this to search the course PDFs (see slides::run_claude). Nothing else
     // may write to stdout here, so it runs before the transcription engine is set up.
+    // For the UI tests (tests/ui): the exact page the window shows.
+    if args.iter().any(|a| a == "--dump-ui") {
+        return print!("{}", ui());
+    }
     if args.iter().any(|a| a == "--mcp-material") {
         let course = args.iter().position(|a| a == "--course").and_then(|j| args.get(j + 1)).cloned().unwrap_or_default();
         return material::serve_mcp(&course);
@@ -64,7 +71,33 @@ fn main() {
         }
         return;
     }
-    // Headless: `transcribe-lecture --slides transcript.md [--course "Networks"] [--model opus] [--effort high] [--lang it]`
+    // Headless: `transcribe-lecture --check file.md [--course X] [--model sonnet] [--effort low]`.
+    // A real Claude Code call; prints the proposed fixes and corrections, writes nothing.
+    if let Some(i) = args.iter().position(|a| a == "--check") {
+        let opt = |k: &str| args.iter().position(|a| a == k).map(|j| args[j + 1].clone());
+        let (course, model, effort) = (opt("--course").unwrap_or_default(), opt("--model").unwrap_or_else(|| slides::DEFAULT_MODEL.into()), opt("--effort").unwrap_or_else(|| slides::DEFAULT_EFFORT.into()));
+        match transcribe_lecture::check::check(std::path::Path::new(&args[i + 1]), &course, &model, &effort) {
+            Ok(v) => {
+                for f in v["fixes"].as_array().into_iter().flatten() {
+                    println!("#{} [{}] {}\n   - {}\n   + {}", f["i"], f["t"], f["why"].as_str().unwrap_or(""), f["old"].as_str().unwrap_or(""), f["text"].as_str().unwrap_or(""));
+                }
+                println!("\ncorrections: {}\nterms: {}\nusage: {}\nlookups: {}", v["corrections"], v["terms"], v["usage"], v["lookups"]);
+            }
+            Err(e) => eprintln!("error: {e}"),
+        }
+        return;
+    }
+    // Headless: `transcribe-lecture --draft file.md [--course X] [--model sonnet] [--effort high] [--lang it] [--hint "…"]`.
+    // A real Claude Code call; writes the notes into "<lecture> · Docs/", so run it on a copy.
+    if let Some(i) = args.iter().position(|a| a == "--draft") {
+        let opt = |k: &str| args.iter().position(|a| a == k).map(|j| args[j + 1].clone()).unwrap_or_default();
+        match docs::draft(std::path::Path::new(&args[i + 1]), &opt("--course"), &opt("--model"), &opt("--effort"), &opt("--lang"), &opt("--hint")) {
+            Ok(v) => println!("saved {}\nusage: {}\nlookups: {}", v["doc"].as_str().unwrap_or(""), v["usage"], v["lookups"]),
+            Err(e) => eprintln!("error: {e}"),
+        }
+        return;
+    }
+    // Headless: `transcribe-lecture --slides transcript.md [--course "Networks"] [--model opus] [--effort high] [--lang it] [--hint "…"]`
     if let Some(i) = args.iter().position(|a| a == "--slides") {
         let course = args.iter().position(|a| a == "--course").map(|j| args[j + 1].clone()).unwrap_or_default();
         let model = args.iter().position(|a| a == "--model").map(|j| args[j + 1].clone()).unwrap_or_else(|| slides::DEFAULT_MODEL.into());
@@ -77,7 +110,8 @@ fn main() {
         } else {
             slides::Mode::Next
         };
-        match slides::generate(std::path::Path::new(&args[i + 1]), &course, mode, &model, &effort, &lang) {
+        let hint = args.iter().position(|a| a == "--hint").map(|j| args[j + 1].clone()).unwrap_or_default();
+        match slides::generate(std::path::Path::new(&args[i + 1]), &course, mode, &model, &effort, &lang, &hint) {
             Ok(v) => println!(
                 "{} slides (+{}, replaced last: {}, flagged: {}) · usage {}",
                 v["slides"].as_array().map_or(0, |a| a.len()),
@@ -117,11 +151,16 @@ fn main() {
 
     let emit_proxy = proxy.clone();
     let mut engine = engine::spawn(Box::new(move |e: Event| {
+        // "recording", "paused" or "idle", for scripts/install.sh: never replace the app mid-lecture.
+        if let Event::State { state, .. } = &e {
+            let _ = std::fs::write(paths::data_dir().join("state"), state);
+        }
         if let Ok(s) = serde_json::to_string(&e) {
             let _ = emit_proxy.send_event(s);
         }
     }));
     let tx = engine.tx.clone();
+    let _ = std::fs::write(paths::data_dir().join("state"), "idle"); // none left from a crash
 
     let window = WindowBuilder::new()
         .with_title(paths::APP_NAME)
@@ -188,9 +227,9 @@ fn main() {
                     let (path, course, proxy) = (PathBuf::from(s("path")), s("course"), ipc_proxy.clone());
                     let mode = if msg["rebuild"].as_bool() == Some(true) { slides::Mode::Rebuild } else { slides::Mode::parse(&s("mode")) };
                     let (model, effort) = (s("model"), s("effort"));
-                    let lang = s("lang");
+                    let (lang, hint) = (s("lang"), s("hint"));
                     std::thread::spawn(move || {
-                        let r = slides::generate(&path, &course, mode, &model, &effort, &lang);
+                        let r = slides::generate(&path, &course, mode, &model, &effort, &lang, &hint);
                         SLIDES_BUSY.store(false, Ordering::SeqCst);
                         let ev = r.unwrap_or_else(|e| json!({ "type": "slidesError", "message": e, "path": path.to_string_lossy() }));
                         let _ = proxy.send_event(ev.to_string());
@@ -200,6 +239,28 @@ fn main() {
                     let path = PathBuf::from(s("path"));
                     let r = if msg["cmd"] == "slidesUndo" { slides::undo(&path) } else { slides::state(&path) };
                     let ev = r.unwrap_or_else(|e| json!({ "type": "slidesError", "message": e, "path": s("path") }));
+                    let _ = ipc_proxy.send_event(ev.to_string());
+                }
+                // Check transcript: Claude Code proofreads the lecture; the fixes come back for review.
+                "checkTranscript" => {
+                    use std::sync::atomic::Ordering;
+                    if CHECK_BUSY.swap(true, Ordering::SeqCst) {
+                        return;
+                    }
+                    let (path, course, model, effort, proxy) = (PathBuf::from(s("path")), s("course"), s("model"), s("effort"), ipc_proxy.clone());
+                    std::thread::spawn(move || {
+                        let r = transcribe_lecture::check::check(&path, &course, &model, &effort);
+                        CHECK_BUSY.store(false, Ordering::SeqCst);
+                        let ev = r.unwrap_or_else(|e| json!({ "type": "checkError", "message": e, "path": path.to_string_lossy() }));
+                        let _ = proxy.send_event(ev.to_string());
+                    });
+                }
+                // Accepted from a check: corrections and terms into the course glossary.
+                "glossaryAdd" => {
+                    let course = s("course");
+                    glossary::merge(&course, &json!({ "corrections": msg["corrections"], "terms": msg["terms"] }));
+                    let g = glossary::load(&course);
+                    let ev = json!({ "type": "glossary", "course": course, "corrections": g["corrections"], "terms": g["terms"] });
                     let _ = ipc_proxy.send_event(ev.to_string());
                 }
                 "glossary" | "glossaryRemove" => {
@@ -234,6 +295,34 @@ fn main() {
                         ev["files"] = json!(material::list(&course));
                         let _ = proxy.send_event(ev.to_string());
                     });
+                }
+                // Docs: files beside the lecture (see docs.rs). Drafting runs on its own thread.
+                "docsList" | "docRead" | "docSave" | "docCreate" | "docRename" | "docDelete" | "docImage" => {
+                    let _ = ipc_proxy.send_event(docs::handle(&msg).to_string());
+                }
+                // The file picker would block the window: its own thread.
+                "docPickImage" => {
+                    let (msg, proxy) = (msg.clone(), ipc_proxy.clone());
+                    std::thread::spawn(move || {
+                        let _ = proxy.send_event(docs::handle(&msg).to_string());
+                    });
+                }
+                "docDraft" => {
+                    use std::sync::atomic::Ordering;
+                    if DRAFT_BUSY.swap(true, Ordering::SeqCst) {
+                        return;
+                    }
+                    let (path, course, model, effort, lang, hint, proxy) = (PathBuf::from(s("path")), s("course"), s("model"), s("effort"), s("lang"), s("hint"), ipc_proxy.clone());
+                    std::thread::spawn(move || {
+                        let r = docs::draft(&path, &course, &model, &effort, &lang, &hint);
+                        DRAFT_BUSY.store(false, Ordering::SeqCst);
+                        let ev = r.unwrap_or_else(|e| json!({ "type": "docDraftError", "message": e, "path": path.to_string_lossy() }));
+                        let _ = proxy.send_event(ev.to_string());
+                    });
+                }
+                "lineEdit" => {
+                    let i = msg["i"].as_u64().unwrap_or(u64::MAX) as usize;
+                    let _ = tx.send(Cmd::EditLine { path: PathBuf::from(s("path")), op: s("op"), i, text: s("text") });
                 }
                 "loadTranscript" => {
                     let ev = slides::transcript_payload(&PathBuf::from(s("path")))
@@ -313,6 +402,18 @@ fn main() {
                         let _ = proxy.send_event(json!({ "type": "claudeCheck", "found": version.is_some(), "version": version }).to_string());
                     });
                 }
+                // Slide style page: three sample slides in the chosen style (and, with feedback, the
+                // student's own rules rewritten to include it).
+                "styleSample" => {
+                    let proxy = ipc_proxy.clone();
+                    let (course, model, effort, lang, feedback) = (s("course"), s("model"), s("effort"), s("lang"), s("feedback"));
+                    let (style, previous, builtin) = (msg["style"].clone(), msg["previous"].clone(), msg["builtin"].as_bool() == Some(true));
+                    std::thread::spawn(move || {
+                        let r = slides::sample(&out_dir(), builtin, &course, &model, &effort, &lang, &style, &feedback, &previous);
+                        let ev = r.unwrap_or_else(|e| json!({ "type": "styleError", "message": e }));
+                        let _ = proxy.send_event(ev.to_string());
+                    });
+                }
                 "saveSettings" => {
                     let p = paths::settings_path();
                     let _ = std::fs::create_dir_all(p.parent().unwrap());
@@ -324,9 +425,12 @@ fn main() {
         .build(&window)
         .expect("webview");
 
+    let menu = app_menu();
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
+            // NSApp exists from here on: the menu bar gives text fields Cmd-C/V/X/A/Z.
+            TaoEvent::NewEvents(tao::event::StartCause::Init) => menu.init_for_nsapp(),
             TaoEvent::UserEvent(js) => {
                 let _ = webview.evaluate_script(&format!("window.onEngine({js})"));
             }
@@ -334,9 +438,31 @@ fn main() {
                 engine.shutdown(); // finishes and saves any running recording
                 *control_flow = ControlFlow::Exit;
             }
+            // Quit from the menu or Dock (Cmd-Q) skips CloseRequested: save the recording here too.
+            TaoEvent::LoopDestroyed => engine.shutdown(),
             _ => {}
         }
     });
+}
+
+/// The menu bar. Without an Edit menu, macOS doesn't send Cut, Copy, Paste, Select All and
+/// Undo to the page, so their shortcuts would do nothing in text fields and transcript lines.
+fn app_menu() -> muda::Menu {
+    use muda::{Menu, PredefinedMenuItem as P, Submenu};
+    let menu = Menu::new();
+    let app = Submenu::with_items(paths::APP_NAME, true, &[
+        &P::about(None, None), &P::separator(), &P::services(None), &P::separator(),
+        &P::hide(None), &P::hide_others(None), &P::show_all(None), &P::separator(), &P::quit(None),
+    ]);
+    let edit = Submenu::with_items("Edit", true, &[
+        &P::undo(None), &P::redo(None), &P::separator(),
+        &P::cut(None), &P::copy(None), &P::paste(None), &P::select_all(None),
+    ]);
+    let window = Submenu::with_items("Window", true, &[&P::minimize(None), &P::fullscreen(None), &P::separator(), &P::close_window(None)]);
+    for m in [app, edit, window].into_iter().flatten() {
+        let _ = menu.append(&m);
+    }
+    menu
 }
 
 /// The macOS file picker, through AppleScript (no extra dependencies). Empty if cancelled.

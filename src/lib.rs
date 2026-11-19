@@ -1,4 +1,6 @@
 pub mod audio;
+pub mod check;
+pub mod docs;
 pub mod engine;
 pub mod glossary;
 pub mod material;

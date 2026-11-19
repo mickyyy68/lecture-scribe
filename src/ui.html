@@ -65,6 +65,18 @@
   .seg { display: grid; grid-template-columns: 66px 1fr; gap: 12px; margin: 0 0 .55em; }
   .ts { font: 12px var(--font-mono); color: var(--muted-foreground); padding-top: .45em; text-align: right; cursor: default; }
   .seg .txt { white-space: pre-wrap; }
+  /* Click a line to edit it in place (see "editing lines by hand"). */
+  .seg .txt { margin: 0 -6px; padding: 0 6px; border-radius: 3px; }
+  .can-edit .seg .txt { cursor: text; }
+  .can-edit .seg:hover .txt:not(:focus) { background: var(--muted); }
+  .seg .txt[contenteditable]:focus { outline: none; background: var(--muted); box-shadow: inset 0 0 0 var(--stroke-hairline) var(--border); }
+  .seg .txt[contenteditable]:empty::before { content: "Type here…"; color: var(--muted-foreground); }
+  .seg .ts { position: relative; }
+  .seg .add { display: none; }
+  .can-edit .seg .add { display: block; position: absolute; left: -24px; top: .2em; width: 22px; height: 22px; padding: 0; border: none;
+    font: 500 17px/20px var(--font-sans); color: var(--muted-foreground); background: transparent; opacity: 0; }
+  .can-edit .seg:hover .add { opacity: 1; }
+  .can-edit .seg .add:hover { background: var(--muted); color: var(--foreground); }
   .seg.fresh .txt { animation: fade .5s ease; }
   .seg.flash .txt { animation: flash 1.6s ease; }
   @keyframes fade { from { background: var(--success-subtle); } to { background: transparent; } }
@@ -107,7 +119,7 @@
   .sp-status .err { color: var(--destructive); }
   .prog { height: var(--stroke-strong); overflow: hidden; }
   .prog i { display: block; height: 100%; width: 30%; background: var(--primary); transform: translateX(-100%); }
-  .busy .prog i { animation: run 1.3s linear infinite; }
+  .busy #slideProg i, .prog.on i { animation: run 1.3s linear infinite; }
   @keyframes run { to { transform: translateX(340%); } }
   #slideList { flex: 1; overflow-y: auto; padding: 12px 16px 24px; display: grid; gap: 22px; align-content: start; }
   .si .fr { width: 100%; aspect-ratio: 16 / 9; position: relative; overflow: hidden; outline: var(--stroke-hairline) solid var(--border); }
@@ -121,6 +133,7 @@
   .panel h3 { margin: 0 0 6px; font: 600 12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
   .panel .hint { margin: 0 0 12px; font-size: 13px; line-height: 19px; color: var(--muted-foreground); max-width: 560px; }
   #glossView .hint { margin-bottom: 18px; }
+  .panel .hint.err { color: var(--destructive); }
   #setView .row { margin-bottom: 8px; }
   #setView .field-in { max-width: 420px; width: 100%; }
   #themeDesc { display: block; height: 84px; resize: vertical; font: 500 13px/19px var(--font-sans); -webkit-user-select: text; }
@@ -136,11 +149,115 @@
   .g-terms { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 24px; }
   .g-term { display: inline-flex; align-items: center; gap: 2px; font: 13px var(--font-mono); background: var(--secondary); color: var(--secondary-foreground); padding: 3px 4px 3px 10px; }
   .g-sec { margin-bottom: 26px; }
+  /* Check transcript: proposed fixes to review */
+  .ck-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .ck-head .ck-n { font-size: 13px; color: var(--muted-foreground); margin-right: auto; }
+  .ck-fix { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 9px 0; border-top: var(--stroke-hairline) solid var(--border); font-size: 14px; line-height: 21px; }
+  .ck-fix a { font: 12px/21px var(--font-mono); color: var(--muted-foreground); cursor: pointer; }
+  .ck-fix a:hover { color: var(--foreground); }
+  .ck-fix .why { display: block; font-size: 12px; color: var(--muted-foreground); }
+  .ck-fix del { color: var(--destructive); text-decoration: line-through; }
+  .ck-fix ins { text-decoration: none; background: var(--success-subtle); }
+  .ck-fix .ck-act { display: flex; gap: 6px; }
+  .ck-fix .ck-act button { padding: 2px 10px; font-size: 12.5px; }
+  .ck-fix.done { opacity: .55; }
+  .ck-fix .ck-st { font-size: 12px; color: var(--muted-foreground); white-space: nowrap; }
+  .seg.has-fix .txt { text-decoration: underline wavy var(--diagram-link); text-decoration-thickness: 1px; text-underline-offset: 4px; }
   .m-row { grid-template-columns: minmax(0, 1fr) auto 28px; font-size: 13.5px; }
   .m-row .pg { color: var(--muted-foreground); }
   #matAdd { margin-top: 12px; }
   .sp-empty { color: var(--muted-foreground); font-size: 14px; line-height: 1.6; padding: 40px 8px; max-width: 460px; }
   .sp-empty b { color: var(--foreground); }
+
+  /* Docs tab: the editor (docs.js). Headings and title in the theme's serif, text in its sans. */
+  .dock-model { cursor: pointer; }
+  .hint-in { flex: 1; min-width: 60px; max-width: none; font-size: 13px; padding: 6px 8px; -webkit-user-select: text; }
+  #docsView { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .dc-head { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: var(--stroke-hairline) solid var(--border); }
+  .dc-head .picker { max-width: 300px; }
+  .dc-head button:not(.picker) { padding: 4px 10px; font-size: 12.5px; font-weight: 500; }
+  #docSavedTxt { font-size: 12px; color: var(--muted-foreground); }
+  #docScroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-user-select: text; }
+  #docPage { max-width: 760px; margin: 0 auto; padding: 34px 44px 200px; }
+  #docTitle { display: block; width: 100%; border: none; background: transparent; outline: none; padding: 0; margin: 0 0 18px;
+    font: 600 32px/1.2 var(--font-serif); letter-spacing: -0.01em; color: var(--foreground); -webkit-user-select: text; }
+  #docTitle::placeholder { color: var(--muted-foreground); opacity: .6; }
+  #docBody { outline: none; font: 16px/1.65 var(--font-sans); color: var(--foreground); -webkit-user-select: text; overflow-wrap: anywhere; }
+  #docBody > * { position: relative; margin: 0 0 .65em; }
+  #docBody h1, #docBody h2 { font-family: var(--font-serif); font-weight: 600; letter-spacing: -0.005em; }
+  #docBody h1 { font-size: 27px; line-height: 1.3; margin: 1.15em 0 .35em; }
+  #docBody h2 { font-size: 22px; line-height: 1.3; margin: 1.1em 0 .3em; }
+  #docBody h3 { font: 600 17.5px/1.4 var(--font-sans); margin: 1em 0 .25em; }
+  #docBody > :first-child { margin-top: 0; }
+  #docBody .li { --in: 0; padding-left: calc(26px + var(--in) * 24px); margin-bottom: .2em; }
+  #docBody .li[data-in="1"] { --in: 1; } #docBody .li[data-in="2"] { --in: 2; } #docBody .li[data-in="3"] { --in: 3; } #docBody .li[data-in="4"] { --in: 4; }
+  #docBody .li::before { position: absolute; left: calc(var(--in) * 24px); width: 20px; text-align: center; color: var(--muted-foreground); }
+  #docBody .li[data-k="ul"]::before { content: "•"; }
+  #docBody .li[data-k="ul"][data-in="1"]::before, #docBody .li[data-k="ul"][data-in="3"]::before { content: "◦"; }
+  #docBody .li[data-k="ol"]::before { content: attr(data-n) "."; text-align: right; width: 20px; font-variant-numeric: tabular-nums; }
+  #docBody .li[data-k="todo"]::before { content: ""; top: .32em; left: calc(var(--in) * 24px + 3px); width: 13px; height: 13px; border: 1.5px solid var(--muted-foreground); border-radius: 3px; cursor: pointer; }
+  #docBody .li[data-k="todo"][data-done]::before { background: var(--primary); border-color: var(--primary); }
+  #docBody .li[data-k="todo"][data-done]::after { content: ""; position: absolute; top: .5em; left: calc(var(--in) * 24px + 7.5px); width: 4px; height: 8px;
+    border: solid var(--primary-foreground); border-width: 0 1.8px 1.8px 0; transform: rotate(45deg); pointer-events: none; }
+  #docBody .li[data-done] { color: var(--muted-foreground); text-decoration: line-through; }
+  #docBody blockquote { margin-left: 0; margin-right: 0; padding: 1px 0 1px 16px; border-left: var(--stroke-strong) solid var(--border); color: var(--muted-foreground); }
+  #docBody blockquote b { color: var(--foreground); }
+  #docBody pre { font: 13.5px/1.6 var(--font-mono); background: var(--muted); padding: 12px 16px; white-space: pre-wrap; border-radius: var(--radius-xl); }
+  #docBody pre:not([data-lang=""])::after { content: attr(data-lang); position: absolute; top: 4px; right: 10px; font: 11px var(--font-mono); color: var(--muted-foreground); }
+  #docBody code { font: .87em var(--font-mono); background: var(--muted); padding: 1px 5px; border-radius: 3px; }
+  #docBody a { color: var(--diagram-link); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+  #docBody a.tl { font: 12px/18px var(--font-mono); text-decoration: none; border: var(--stroke-hairline) solid var(--diagram-link); padding: 0 5px; margin: 0 1px; vertical-align: 1px; white-space: nowrap; }
+  #docBody a.tl:hover { background: var(--accent); }
+  #docBody hr { border: none; border-top: var(--stroke-hairline) solid var(--border); margin: 1.5em 0; padding: 4px 0; background-clip: content-box; cursor: default; }
+  #docBody .mathb { text-align: center; padding: 6px 0; cursor: pointer; overflow-x: auto; overflow-y: hidden; }
+  #docBody .mathb:hover, #docBody .chartb:hover, #docBody .im:hover { background: var(--muted); }
+  #docBody .im { cursor: pointer; }
+  #docBody .hint-empty, .cerr { color: var(--muted-foreground); font-size: 14px; }
+  .cerr { padding: 12px; border: var(--stroke-hairline) dashed var(--border); }
+  #docBody figure { margin: 1.1em 0; }
+  #docBody figure img { display: block; max-width: 100%; margin: 0 auto; }
+  #docBody figure.up img { opacity: .5; }
+  #docBody figcaption { margin-top: 6px; text-align: center; font-size: 13px; color: var(--muted-foreground); outline: none; min-height: 1.4em; -webkit-user-select: text; }
+  #docBody figcaption:empty:focus::before { content: "Add a caption"; opacity: .6; }
+  #docBody .chartb { cursor: pointer; padding: 6px 0; }
+  .cw { position: relative; overflow: hidden; }
+  .dchart > * > :first-child { margin-top: 0; }
+  .dchart.pr-slide { position: absolute; left: 0; top: 0; width: 960px; height: auto; padding: 8px 0; transform-origin: 0 0; background: transparent; overflow: visible; }
+  #docBody .sel { outline: var(--stroke-strong) solid var(--diagram-link); outline-offset: 3px; }
+  #docBody .tbl { overflow-x: auto; }
+  #docBody table { border-collapse: collapse; width: 100%; font-size: 14.5px; line-height: 1.5; }
+  #docBody th, #docBody td { border: var(--stroke-hairline) solid var(--border); padding: 6px 10px; text-align: left; vertical-align: top; outline: none; min-width: 60px; -webkit-user-select: text; }
+  #docBody th { background: var(--muted); font-weight: 600; }
+  #docBody td:focus, #docBody th:focus { box-shadow: inset 0 0 0 1.5px var(--diagram-link); }
+  .tbl-tools { display: flex; gap: 4px; margin-top: 4px; visibility: hidden; }
+  .tbl:hover .tbl-tools, .tbl:focus-within .tbl-tools { visibility: visible; }
+  .tbl-tools button { border: none; padding: 2px 8px; font-size: 12px; font-weight: 500; color: var(--muted-foreground); }
+  #docBody .ph::before { content: attr(data-ph); position: absolute; left: 0; color: var(--muted-foreground); opacity: .65; pointer-events: none; white-space: nowrap; }
+  #docBody .li.ph::before { content: none; }
+  #docEmpty { margin: 0 auto; }
+  .dc-start { display: flex; gap: 8px; margin: 18px 0 14px; }
+  .dc-sub { display: block; font-size: 13px; line-height: 19px; }
+  /* Floating bits of the doc editor: selection toolbar, / menu, edit box */
+  .float { position: fixed; z-index: 30; display: none; background: var(--card); color: var(--card-foreground); border: var(--stroke-hairline) solid var(--border);
+    box-shadow: 0 6px 24px color-mix(in oklch, var(--foreground) 14%, transparent); }
+  #dtool { padding: 3px; white-space: nowrap; }
+  #dtool button { border: none; padding: 4px 9px; font: 600 13px/18px var(--font-sans); }
+  #dtool i { display: inline-block; width: var(--stroke-hairline); height: 16px; background: var(--border); vertical-align: middle; margin: 0 3px; }
+  #dslash { width: 260px; max-height: 320px; overflow-y: auto; padding: 4px 0; }
+  .ds-i { display: flex; justify-content: space-between; gap: 10px; padding: 6px 12px; font-size: 13.5px; cursor: default; }
+  .ds-i small { color: var(--muted-foreground); font: 11.5px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ds-i.act { background: var(--accent); color: var(--accent-foreground); }
+  #dpop { width: 440px; padding: 10px 12px; }
+  .dp-l { font-size: 12px; color: var(--muted-foreground); margin-bottom: 6px; }
+  #dpop .dp-in { display: block; width: 100%; max-width: none; font-size: 13.5px; -webkit-user-select: text; }
+  #dpop textarea.dp-in { height: 110px; resize: vertical; }
+  #dpop .dp-in.mono { font-family: var(--font-mono); font-size: 12.5px; line-height: 18px; }
+  .dp-prev { margin-top: 8px; padding: 8px; background: var(--background); border: var(--stroke-hairline) solid var(--border); overflow-x: auto; text-align: center; }
+  .dp-chart { text-align: left; }
+  .dp-err { margin: 0; color: var(--destructive); font-size: 12.5px; text-align: left; }
+  .dp-row { display: flex; gap: 6px; margin-top: 10px; }
+  .dp-row button { padding: 4px 10px; font-size: 12.5px; }
+  #setView .set-l { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted-foreground); margin-right: 14px; }
 
   footer { border-top: var(--stroke-hairline) solid var(--border); background: var(--card); padding: 8px 20px; font-size: 12.5px; color: var(--muted-foreground); }
   footer button { padding: 4px 10px; font-size: 12.5px; }
@@ -156,6 +273,11 @@
   /* First-run setup */
   #setup { position: fixed; inset: 0; z-index: 20; background: var(--background); display: none; overflow-y: auto; }
   #setup.on { display: block; }
+  #ask { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center; background: rgb(0 0 0 / .35); }
+  #ask.on { display: flex; }
+  #ask > div { max-width: 440px; margin: 20px; padding: 20px 22px 16px; background: var(--card); color: var(--card-foreground); border: var(--stroke-hairline) solid var(--border); }
+  #askMsg { font: 500 14px/21px var(--font-sans); margin: 0 0 16px; }
+  #ask .row { display: flex; justify-content: flex-end; gap: 8px; }
   .su { max-width: 620px; margin: 0 auto; padding: 56px 32px 40px; display: flex; flex-direction: column; min-height: 100%; box-sizing: border-box; }
   .su-steps { display: flex; gap: 6px; }
   .su-steps i { flex: 1; height: var(--stroke-strong); background: var(--border); }
@@ -178,6 +300,28 @@
   .su .bar > div { height: 100%; width: 0; background: var(--primary); transition: width .4s; }
   #suBody { margin: auto 0; padding: 24px 0 40px; } /* centred between the progress bar and the buttons */
   .su-nav { padding-top: 28px; display: flex; gap: 10px; align-items: center; }
+  .su.single .su-steps, .su.single #suBack, .su.single #suSkip { visibility: hidden; }
+  /* Slide style page: the controls beside Claude's sample slides */
+  .su.wide { max-width: 1240px; }
+  .su.wide #suBody { margin: 0; }
+  .st { display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 36px; align-items: start; }
+  .st-ctl { display: grid; gap: 16px; position: sticky; top: 16px; }
+  .st-ctl h4 { margin: 0 0 6px; font: 600 12px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-foreground); }
+  .st-ctl .switch button { flex: 1; }
+  .st-ctl .hint { margin: 6px 0 0; font-size: 12.5px; line-height: 18px; color: var(--muted-foreground); }
+  #stRules { display: block; width: 100%; height: 120px; resize: vertical; font: 500 13px/19px var(--font-sans); -webkit-user-select: text; }
+  .st-prev { display: grid; gap: 14px; min-width: 0; }
+  .st-src { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; font-size: 13px; color: var(--muted-foreground); }
+  .st-src a { color: var(--diagram-link); cursor: pointer; }
+  .st-bar { display: flex; gap: 10px; align-items: center; }
+  .st-bar .field-in { flex: 1; max-width: none; font-size: 13.5px; padding: 8px 10px; }
+  .st .si-notes { font-size: 13px; line-height: 19px; margin: 6px 0 0; }
+  .st-msg { min-height: 18px; margin-top: -6px; font-size: 13px; color: var(--muted-foreground); }
+  .st-msg.err { color: var(--destructive); }
+  .st-msg.dirty { color: var(--foreground); }
+  #stSlides { display: grid; gap: 22px; }
+  #stSlides.busy { opacity: .45; }
+  .st-wait { border: var(--stroke-hairline) dashed var(--border); aspect-ratio: 16 / 9; display: grid; place-items: center; color: var(--muted-foreground); font-size: 14px; text-align: center; padding: 20px; }
 </style>
 </head>
 <body>
@@ -223,17 +367,47 @@
       <span class="spacer"></span>
       <span class="switch">
         <button class="on" id="tabSlides">Slides</button>
+        <button id="docsBtn" title="Your own docs about this lecture: notes, summaries, exercises">Docs</button>
         <button id="glossBtn" title="Course PDFs and the words the AI taught the transcriber">Glossary</button>
-        <button id="setBtn" title="Slide language, theme and setup">Settings</button>
+        <button id="setBtn" title="Claude, language, theme and setup">Settings</button>
       </span>
       <button id="presentBtn" title="Open the deck in the browser to present or print">Present</button>
     </div>
     <div id="slideList"></div>
+    <div id="docsView" style="display:none">
+      <div class="dc-head" id="docHead"><select id="docSel" title="This lecture's docs"></select><span id="docSavedTxt"></span><span class="spacer"></span>
+        <button id="docNew" title="A new, empty doc">+ New doc</button><button id="docDel" title="Move this doc to the Trash">Delete</button></div>
+      <div id="docScroll">
+        <div id="docPage" style="display:none"><input id="docTitle" placeholder="Untitled" spellcheck="false"><div id="docBody" spellcheck="true"></div></div>
+        <div id="docEmpty" class="sp-empty"></div>
+      </div>
+      <div class="sp-status" id="docStatus"></div>
+      <div class="prog" id="docProg"><i></i></div>
+      <div class="dock" id="docBar">
+        <span class="dock-model" title="Model and reasoning: click to change them in Settings"><span class="claude-mark">/*CLAUDE_SVG*/</span><span class="dockModelTxt"></span></span>
+        <input id="docHint" class="field-in hint-in" placeholder="Suggestion for Claude (optional)" title="Sent with Draft notes: “focus on the lab”, “more examples”, “in English”…" spellcheck="false">
+        <button id="draftBtn" class="go" title="Claude writes study notes of the whole lecture into a new doc">Draft notes</button>
+      </div>
+    </div>
     <div id="glossView" class="panel" style="display:none"></div>
     <div id="setView" class="panel" style="display:none">
-      <div class="g-sec"><h3>Slide language</h3>
-        <p class="hint">The language of slides, notes and review cards. The transcript stays in the language spoken.</p>
-        <select id="slideLang"><option value="">Same as the lecture</option></select></div>
+      <div class="g-sec"><h3><span class="claude-mark" style="width:14px;height:14px;vertical-align:-2px;margin-right:6px">/*CLAUDE_SVG*/</span>Claude</h3>
+        <p class="hint">For everything Claude Code makes, on your Claude subscription: slides, docs, review cards and transcript checks. More reasoning is slower and more careful; rebuilding the deck, drafting notes and checking always use at least High.</p>
+        <div class="row"><label class="set-l">Model
+            <select id="aiModel" title="Claude model for slides, docs and checks">
+              <option value="sonnet">Sonnet</option>
+              <option value="opus">Opus</option>
+              <option value="fable">Fable</option>
+              <option value="haiku">Haiku</option>
+            </select></label>
+          <label class="set-l">Reasoning
+            <select id="effort" title="More is slower and more careful">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="max">Max</option>
+            </select></label></div>
+        <div class="row"><label class="set-l">Language <select id="slideLang" title="The language of slides, notes, review cards and docs. The transcript stays in the language spoken"><option value="">Same as the lecture</option></select></label></div></div>
       <div class="g-sec"><h3>Theme</h3>
         <p class="hint">Colours and fonts of the slides, exported decks and this window. A theme is a CSS file in the themes folder that overrides the default tokens: edit it, or drop in your own.</p>
         <div class="row"><select id="themeSel"><option value="">Default</option></select>
@@ -243,35 +417,23 @@
         <div class="row"><input id="themeName" class="field-in" placeholder="Name (e.g. My university)" spellcheck="false"></div>
         <div class="row"><textarea id="themeDesc" class="field-in" placeholder="Navy and gold like my university's website (example.edu), serif titles, calm and readable"></textarea></div>
         <div class="row"><button id="themeMake" class="go">Create theme</button><span id="themeMsg"></span></div></div>
+      <div class="g-sec"><h3>Slide style</h3><p class="hint">How much goes on a slide, how it's phrased, diagrams or text, and your own rules. Claude makes sample slides so you can see the result.</p><button id="styleBtn">Open slide style</button></div>
       <div class="g-sec"><h3>Setup</h3><p class="hint">Speech model, microphone and Claude Code, step by step.</p><button id="setupBtn">Open setup</button></div>
     </div>
     <div class="sp-status" id="spStatus"></div>
-    <div class="prog"><i></i></div>
+    <div class="prog" id="slideProg"><i></i></div>
     <div class="dock" id="slideBar">
-      <span class="dock-model" id="dockModel" title="Change it in the ▾ menu"><span class="claude-mark">/*CLAUDE_SVG*/</span><span id="dockModelTxt"></span></span>
-      <span class="spacer"></span>
+      <span class="dock-model" title="Model and reasoning: click to change them in Settings"><span class="claude-mark">/*CLAUDE_SVG*/</span><span class="dockModelTxt"></span></span>
+      <input id="slideHint" class="field-in hint-in" placeholder="Suggestion for Claude (optional)" title="Sent with the next Make slides, Rebuild or Review cards: “more diagrams”, “skip the recap”…" spellcheck="false">
       <span class="split">
         <button id="slidesBtn" class="go" disabled>Make slides<kbd>⇧⌘↩</kbd></button>
-        <button id="moreBtn" class="go caret" title="Model, reasoning and more slide actions">▾</button>
+        <button id="moreBtn" class="go caret" title="More slide actions">▾</button>
         <div class="menu" id="moreMenu">
-          <label class="mrow"><span class="claude-mark" title="Slides are made by Claude">/*CLAUDE_SVG*/</span>Model
-            <select id="aiModel" title="Claude model that makes the slides, on your Claude subscription">
-              <option value="sonnet">Sonnet</option>
-              <option value="opus">Opus</option>
-              <option value="fable">Fable</option>
-              <option value="haiku">Haiku</option>
-            </select></label>
-          <label class="mrow"><span class="claude-mark"></span>Reasoning
-            <select id="effort" title="More is slower and more careful. Rebuild deck and Review cards always use at least High">
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="max">Max</option>
-            </select></label>
-          <hr>
           <button id="rebuildBtn" title="Make the whole deck again from the full lecture, at higher reasoning effort (Undo last brings the old one back)">Rebuild deck</button>
           <button id="reviewBtn" title="Questions with hidden answers for the whole lecture, added at the end of the deck. Making them again replaces the old ones">Review cards</button>
           <button id="undoBtn" title="Remove the slides from the last click">Undo last</button>
+          <hr>
+          <button id="checkBtn" title="Claude reads the transcript and proposes fixes for misheard words. You review them in the Glossary tab">Check transcript</button>
         </div>
       </span>
     </div>
@@ -289,6 +451,10 @@
   <button id="folderBtn">Open folder</button>
 </footer>
 <div id="toast"></div>
+<div id="dtool" class="float"><button data-f="bold" title="Bold (⌘B)">B</button><button data-f="italic" title="Italic (⌘I)" style="font-style:italic">I</button><button data-f="strike" title="Strikethrough (⇧⌘X)" style="text-decoration:line-through">S</button><button data-f="code" title="Code (⌘E)" style="font-family:var(--font-mono)">{ }</button><i></i><button data-f="link" title="Link (⌘K)">Link</button></div>
+<div id="dslash" class="float"></div>
+<div id="dpop" class="float"></div>
+<div id="ask"><div><p id="askMsg"></p><div class="row"><button id="askNo">Cancel</button><button id="askYes" class="go">OK</button></div></div></div>
 <div id="setup"><div class="su">
   <div class="su-steps" id="suSteps"></div>
   <div id="suBody"></div>
@@ -415,6 +581,7 @@ let models = [], settings = {}, state = "idle", modelReady = false, loadedModel 
 let elapsed = 0, runStart = null, segs = [], follow = true, fontSize = 17, leftPct = 44;
 let curPath = null, deck = null, slidesBusy = false, slidesErr = "", renderedCount = -1;
 let gloss = { corrections: [], terms: [] }, glossOpen = false, mat = [], matBusy = false;
+let slideStyle = {}, styleSample = null, styleBusy = false, styleMsg = null, styleBuiltin = false, styleSingle = false;
 
 for (const [k, v] of Object.entries(LANGS)) $("lang").add(new Option(v, k));
 
@@ -424,7 +591,7 @@ function curModel() { return models.find(m => m.path === $("model").value); }
 function persist() {
   settings = { model: $("model").value, device: $("device").value, language: $("lang").value,
     saveAudio: $("saveAudio").checked, fontSize, course: $("course").value, leftPct, aiModel: $("aiModel").value, effort: $("effort").value,
-    slideLang: $("slideLang").value, theme: $("themeSel").value, onboarded };
+    slideLang: $("slideLang").value, theme: $("themeSel").value, onboarded, style: slideStyle };
   send("saveSettings", { settings });
 }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[c]);
@@ -435,12 +602,15 @@ function toast(msg, err) {
 function applyFont() { $("doc").style.setProperty("--fs", fontSize + "px"); }
 function applySplit() { $("split").style.setProperty("--left", leftPct + "%"); fitSlides(); }
 
+// Changes an element's text only when it differs. render() runs several times a second while
+// recording, and replacing a button's text between mouse down and up makes WebKit drop the click.
+function setText(el, s) { if (el.textContent !== s) el.textContent = s; }
 function render() {
   const rec = state === "recording", paused = state === "paused", busy = rec || paused;
   $("startBtn").style.display = busy ? "none" : "";
   $("pauseBtn").style.display = busy ? "" : "none";
   $("stopBtn").style.display = busy ? "" : "none";
-  $("pauseBtn").textContent = paused ? "Resume" : "Pause";
+  setText($("pauseBtn"), paused ? "Resume" : "Pause");
   $("startBtn").disabled = $("contBtn").disabled = !modelReady || !curModel();
   $("contBtn").style.display = !busy && curPath && segs.length ? "" : "none";
   for (const id of ["model", "lang", "device", "saveAudio", "title", "recent"]) $(id).disabled = busy;
@@ -465,12 +635,105 @@ $("jump").onclick = () => { follow = true; scrollLive(); $("jump").style.display
 function addSeg(t, text, quiet) {
   segs.push({ t, text });
   $("empty").style.display = "none";
-  const el = document.createElement("div"); el.className = "seg" + (quiet ? "" : " fresh"); el.dataset.t = t;
-  el.innerHTML = '<div class="ts"></div><div class="txt"></div>';
-  el.firstChild.textContent = fmt(t); el.lastChild.textContent = text;
+  const el = segRow(t, text); if (!quiet) el.classList.add("fresh");
   $("segs").appendChild(el); if (!quiet) setTimeout(() => el.classList.remove("fresh"), 600);
   $("words").textContent = wordCount().toLocaleString() + " words";
 }
+function segRow(t, text) {
+  const el = document.createElement("div"); el.className = "seg"; el.dataset.t = t;
+  el.innerHTML = '<div class="ts"><span></span><button class="add" title="Add a line below this one">+</button></div><div class="txt"></div>';
+  el.querySelector(".ts span").textContent = fmt(t); el.lastChild.textContent = text;
+  return el;
+}
+
+/* ---------- editing lines by hand ---------- */
+// Like a notes app: click a line to edit it there, Enter splits it, Backspace at its start joins
+// it to the line above, + (on hover) adds a line below. A line is editable only while it's being
+// edited, so dragging across lines still selects text to copy. Each change is saved to the
+// lecture file when the line loses focus (lineEdit), applied here first so typing never waits
+// for the reply. Works while recording too (the engine applies it to the lecture it holds); off
+// while making slides, which works by line number.
+function canEdit() { return !!curPath && !slidesBusy; }
+function renderEditable() {
+  const on = canEdit();
+  if ($("doc").classList.contains("can-edit") === on) return;
+  $("doc").classList.toggle("can-edit", on);
+  if (!on) document.activeElement?.closest?.("#segs .txt")?.blur();
+}
+function rowIndex(el) { return [...$("segs").children].indexOf(el); }
+function caretAt(t, where) {
+  const sel = getSelection(), r = document.createRange();
+  if (where && where.startContainer) { sel.removeAllRanges(); sel.addRange(where); return; }
+  const n = t.firstChild || t;
+  const off = where === "end" ? (n.nodeType === 3 ? n.length : 0) : typeof where === "number" ? Math.min(where, n.length || 0) : 0;
+  r.setStart(n, off); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+}
+function editLine(t, where) {
+  if (!canEdit()) return;
+  t.contentEditable = "plaintext-only"; t.focus(); caretAt(t, where);
+}
+// Where the caret is in a line being edited, or -1 when text is selected.
+function caretOffset(t) {
+  const sel = getSelection(); if (!sel.rangeCount || !sel.isCollapsed) return -1;
+  const r = sel.getRangeAt(0).cloneRange(); r.selectNodeContents(t); r.setEnd(sel.focusNode, sel.focusOffset);
+  return r.toString().length;
+}
+function newRow(at, text = "") {
+  const prev = segs[at - 1] || segs[0], el = segRow(prev ? prev.t : 0, text);
+  el.classList.add("new"); $("segs").insertBefore(el, $("segs").children[at] || null);
+  return el.lastChild;
+}
+$("segs").addEventListener("mouseup", e => {
+  const t = e.target.closest(".txt");
+  if (!t || t.isContentEditable || e.button !== 0 || !getSelection().isCollapsed) return; // a drag selects text
+  editLine(t, document.caretRangeFromPoint(e.clientX, e.clientY));
+});
+$("segs").addEventListener("click", e => {
+  const b = e.target.closest(".add"); if (!b || !canEdit()) return;
+  editLine(newRow(rowIndex(b.closest(".seg")) + 1));
+});
+$("segs").addEventListener("keydown", e => {
+  const t = e.target.closest?.(".txt"); if (!t || !t.isContentEditable || e.isComposing) return;
+  const row = t.parentElement, i = rowIndex(row), at = caretOffset(t), len = t.textContent.length;
+  const go = (el, where) => { if (el) { e.preventDefault(); t.blur(); editLine(el.lastChild, where); } };
+  if (e.key === "Enter") {
+    e.preventDefault();
+    if (at < 0) return;
+    const before = t.textContent.slice(0, at), after = t.textContent.slice(at);
+    if (!before.trim() && after.trim()) { const n = newRow(i); t.blur(); editLine(n); return; } // at the start: a line above
+    t.textContent = before; const n = newRow(i + 1, after.trim()); t.blur(); editLine(n);
+  } else if (e.key === "Backspace" && at === 0 && i > 0) {
+    // Join to the line above, caret at the join.
+    e.preventDefault();
+    const prev = row.previousElementSibling.lastChild, keep = prev.textContent.replace(/\s+$/, ""), rest = t.textContent.trim();
+    t.textContent = ""; t.blur();
+    prev.textContent = keep + (keep && rest ? " " : "") + rest;
+    editLine(prev, keep.length + (keep && rest ? 1 : 0));
+  } else if (e.key === "ArrowUp" && at === 0) go(row.previousElementSibling, "end");
+  else if (e.key === "ArrowDown" && at === len) go(row.nextElementSibling, 0);
+  else if (e.key === "Escape") {
+    e.preventDefault();
+    if (row.classList.contains("new")) row.remove(); else { t.textContent = segs[i].text; t.blur(); }
+  }
+});
+$("segs").addEventListener("focusout", e => {
+  const t = e.target.closest?.(".txt"); if (!t || !t.isContentEditable) return;
+  t.removeAttribute("contenteditable");
+  const row = t.parentElement, i = rowIndex(row); if (i < 0) return;
+  const text = t.textContent.replace(/\s+/g, " ").trim();
+  if (row.classList.contains("new")) {
+    if (!text) { row.remove(); return; }
+    const prev = segs[i - 1] || segs[0];
+    segs.splice(i, 0, { t: prev ? prev.t : 0, text });
+    row.classList.remove("new"); t.textContent = text;
+    send("lineEdit", { path: curPath, op: "insert", i, text });
+  } else if (text !== segs[i].text) {
+    if (!text) { segs.splice(i, 1); row.remove(); } else { segs[i].text = text; t.textContent = text; }
+    send("lineEdit", { path: curPath, op: "set", i, text });
+  } else return;
+  $("words").textContent = wordCount().toLocaleString() + " words";
+});
+
 function clearTranscript() { segs = []; $("segs").innerHTML = ""; $("words").textContent = "0 words"; $("partial").style.display = "none"; }
 function goToTime(hms) {
   const t = secs(hms);
@@ -486,12 +749,16 @@ function goToTime(hms) {
 function setCurPath(p) {
   if (p === curPath) return;
   curPath = p; deck = null; slidesErr = ""; renderedCount = -1;
+  if (typeof Docs !== "undefined") Docs.lecture(p);
   renderSlides();
   if (p) send("slidesState", { path: p });
 }
 function pending() { return deck ? Math.max(segs.length, deck.lines || 0) - (deck.done || 0) : segs.length; }
 
 function renderSlidesBar() {
+  renderEditable();
+  if (typeof Docs !== "undefined") Docs.bar();
+  $("checkBtn").disabled = !curPath || !segs.length || !!(ckHere() && check.busy);
   const p = pending(), n = deck?.slides?.length || 0;
   $("slidesBtn").disabled = !curPath || slidesBusy || p <= 0;
   $("undoBtn").disabled = !curPath || slidesBusy || !n;
@@ -554,12 +821,24 @@ const lectureSlides = () => (deck?.slides || []).filter((x) => x.kind !== "revie
 function makeSlides(mode) {
   if ($({ next: "slidesBtn", rebuild: "rebuildBtn", review: "reviewBtn" }[mode]).disabled) return;
   slidesMode = mode; slidesBusy = true; slidesErr = ""; persist(); renderSlidesBar();
-  send("slides", { path: curPath, course: $("course").value, mode, model: $("aiModel").value, effort: $("effort").value, lang: slideLangCode() });
+  send("slides", { path: curPath, course: $("course").value, mode, model: $("aiModel").value, effort: $("effort").value, lang: slideLangCode(), hint: $("slideHint").value.trim() });
 }
-$("rebuildBtn").onclick = () => { if (!deck?.slides?.length || confirm("Make the whole deck again from the full lecture? Undo last brings the current one back.")) makeSlides("rebuild"); };
+// The webview has no native confirm() (it always returns false), so ask in the page.
+function ask(msg, yes = "OK") {
+  return new Promise(res => {
+    $("askMsg").textContent = msg; $("askYes").textContent = yes; $("ask").classList.add("on"); $("askYes").focus();
+    const done = v => { $("ask").classList.remove("on"); document.removeEventListener("keydown", key, true); res(v); };
+    const key = e => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); done(false); } else if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); done(true); } };
+    document.addEventListener("keydown", key, true);
+    $("askYes").onclick = () => done(true); $("askNo").onclick = () => done(false);
+    $("ask").onclick = e => { if (e.target === $("ask")) done(false); };
+  });
+}
+$("rebuildBtn").onclick = async () => { if (!deck?.slides?.length || await ask("Make the whole deck again from the full lecture? Undo last brings the current one back.", "Make again")) makeSlides("rebuild"); };
 $("reviewBtn").onclick = () => makeSlides("review");
 $("slidesBtn").onclick = () => makeSlides("next");
-$("undoBtn").onclick = () => { if (confirm("Remove the slides from the last click?")) send("slidesUndo", { path: curPath }); };
+$("slideHint").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); makeSlides("next"); } };
+$("undoBtn").onclick = async () => { if (await ask("Remove the slides from the last click?", "Remove")) send("slidesUndo", { path: curPath }); };
 $("presentBtn").onclick = () => deck?.html && send("open", { path: deck.html });
 $("aiModel").onchange = () => { persist(); renderDockModel(); renderSlides(); };
 $("effort").onchange = () => { persist(); renderDockModel(); };
@@ -572,7 +851,7 @@ function renderGloss() {
   showPanels();
   if (!glossOpen) return;
   const v = $("glossView"), course = $("course").value.trim() || "this course";
-  v.innerHTML =
+  v.innerHTML = checkSection() +
     `<div class="g-sec"><h3>Course material · ${mat.length}</h3><p class="hint" id="matHint"></p>` +
     mat.map((f, i) => `<div class="g-row m-row"><span class="c"></span><span class="pg">${f.pages} pages${f.emptyPages ? ` (${f.emptyPages} without text)` : ""}</span><button class="g-x" data-k="material" data-i="${i}" title="Remove">×</button></div>`).join("") +
     `<button id="matAdd" ${matBusy ? "disabled" : ""}>${matBusy ? "Reading PDF…" : "Add PDF…"}</button></div>` +
@@ -586,9 +865,101 @@ function renderGloss() {
   $("corrHint").textContent = `Misheard words that Transcribe Lecture fixes live while transcribing ${course}, from the next sentence on. Remove any that are wrong.`;
   v.querySelectorAll(".g-row").forEach((r, i) => { r.querySelector(".h").textContent = gloss.corrections[i].heard; r.querySelector(".c").textContent = gloss.corrections[i].correct; });
   v.querySelectorAll(".g-term > span").forEach((el, i) => { el.textContent = gloss.terms[i]; });
+  fillCheck(v);
 }
-$("glossBtn").onclick = () => { glossOpen = true; setOpen = false; renderGloss(); loadGloss(); };
-$("tabSlides").onclick = () => { glossOpen = setOpen = false; renderGloss(); };
+
+/* ---------- check transcript ---------- */
+// Claude proofreads the lecture (checkTranscript) and proposes fixed lines and new glossary
+// corrections. Nothing changes until the student accepts: a fix is saved like a hand edit
+// (lineEdit, so it works while recording), a correction goes to the glossary (glossaryAdd).
+// Each fix carries the line's old text; if the line changed since, it isn't applied.
+let check = null; // {path, busy, error, fixes: [{i, t, old, text, why, st}], corrections: [{heard, correct, st}]}
+const ckHere = () => check && check.path === curPath;
+function startCheck() {
+  if (!curPath || check?.busy) return;
+  check = { path: curPath, busy: true };
+  glossOpen = true; setOpen = docsOpen = false; renderGloss(); markFixes(); renderSlidesBar();
+  send("checkTranscript", { path: curPath, course: $("course").value, model: $("aiModel").value, effort: $("effort").value });
+}
+function wordDiff(a, b) {
+  // Words of a and b with an LCS: kept ones plain, removed in <del>, added in <ins>.
+  const x = a.split(" "), y = b.split(" "), n = x.length, m = y.length;
+  const L = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = x[i] === y[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out = [], esc = (w) => w.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && x[i] === y[j]) { out.push(esc(x[i])); i++; j++; }
+    else if (i < n && (j === m || L[i + 1][j] >= L[i][j + 1])) out.push(`<del>${esc(x[i++])}</del>`);
+    else out.push(`<ins>${esc(y[j++])}</ins>`);
+  }
+  return out.join(" ").replace(/<\/del> <del>/g, " ").replace(/<\/ins> <ins>/g, " ");
+}
+function checkSection() {
+  const intro = `<p class="hint">Claude reads this lecture's transcript and proposes fixes for misheard words. You review each one; nothing changes until you accept. It uses the model chosen in the ▾ menu, at least at High reasoning.</p>`;
+  if (!curPath) return `<div class="g-sec"><h3>Check transcript</h3><p class="hint">Open or record a lecture to check its transcript.</p></div>`;
+  if (!ckHere()) return `<div class="g-sec"><h3>Check transcript</h3>${intro}<button id="ckStart">Check transcript</button></div>`;
+  if (check.busy) return `<div class="g-sec"><h3>Check transcript</h3><p class="hint">${engName()} is reading the transcript… (a few minutes for a long lecture)</p></div>`;
+  if (check.error) return `<div class="g-sec"><h3>Check transcript</h3><p class="hint err" id="ckErr"></p><button id="ckStart">Try again</button></div>`;
+  const open = [...check.fixes, ...check.corrections].filter((f) => f.st === "open").length;
+  const nf = check.fixes.length, nc = check.corrections.length;
+  const head = !nf && !nc ? `<span class="ck-n">No recognition errors found.</span><button id="ckStart">Check again</button>`
+    : open ? `<span class="ck-n">${nf} fix${nf === 1 ? "" : "es"}${nc ? `, ${nc} new correction${nc === 1 ? "" : "s"}` : ""} to review</span><button id="ckAll" class="go">Accept all</button><button id="ckNone">Skip all</button>`
+    : `<span class="ck-n">Reviewed: ${check.fixes.filter((f) => f.st === "accepted").length} of ${nf} fixes applied${nc ? `, ${check.corrections.filter((c) => c.st === "accepted").length} of ${nc} corrections added` : ""}.</span><button id="ckStart">Check again</button>`;
+  const act = (k, i, st) => st === "open" ? `<span class="ck-act"><button data-ck="${k}" data-i="${i}" data-do="accept">Accept</button><button data-ck="${k}" data-i="${i}" data-do="skip">Skip</button></span>`
+    : `<span class="ck-st">${{ accepted: "Applied", skipped: "Skipped", stale: "Line changed since", added: "Added" }[st] || st}</span>`;
+  return `<div class="g-sec" id="ckSec"><h3>Check transcript</h3><div class="ck-head">${head}</div>` +
+    check.fixes.map((f, i) => `<div class="ck-fix${f.st === "open" ? "" : " done"}" data-fix="${i}"><a data-t="${f.t}" title="Show it in the transcript">${fmt(f.t)}</a><span>${wordDiff(f.old, f.text)}<span class="why"></span></span>${act("fix", i, f.st)}</div>`).join("") +
+    (nc ? `<h3 style="margin-top:18px">New glossary corrections</h3><p class="hint">Fixed live in this course's next lectures.</p>` +
+      check.corrections.map((c, i) => `<div class="ck-fix${c.st === "open" ? "" : " done"}" data-corr="${i}"><span></span><span><del></del> → <b></b></span>${act("corr", i, c.st)}</div>`).join("") : "") +
+    `</div>`;
+}
+function fillCheck(v) {
+  if (!ckHere()) return;
+  if (check.error) { $("ckErr").textContent = check.error; return; }
+  v.querySelectorAll("[data-fix] .why").forEach((el, i) => { el.textContent = check.fixes[i].why; });
+  v.querySelectorAll("[data-corr]").forEach((el, i) => { el.querySelector("del").textContent = check.corrections[i].heard; el.querySelector("b").textContent = check.corrections[i].correct; });
+}
+// Lines with a fix waiting get a wavy underline in the transcript.
+function markFixes() {
+  document.querySelectorAll("#segs .seg.has-fix").forEach((r) => r.classList.remove("has-fix"));
+  if (!ckHere() || !check.fixes) return;
+  const rows = $("segs").children;
+  for (const f of check.fixes) if (f.st === "open") { const j = fixLine(f); if (j >= 0) rows[j]?.classList.add("has-fix"); }
+}
+function fixLine(f) { return segs[f.i]?.text === f.old ? f.i : segs.findIndex((x) => x.text === f.old); }
+function acceptFix(f) {
+  const j = fixLine(f), t = $("segs").children[j]?.lastChild;
+  if (j < 0 || document.activeElement === t) { f.st = "stale"; return; }
+  segs[j].text = f.text; t.textContent = f.text;
+  send("lineEdit", { path: curPath, op: "set", i: j, text: f.text });
+  f.st = "accepted";
+}
+function decide(kind, i, accept) {
+  if (kind === "fix") { const f = check.fixes[i]; if (f.st !== "open") return; if (accept) acceptFix(f); else f.st = "skipped"; }
+  else { const c = check.corrections[i]; if (c.st !== "open") return; c.st = accept ? "accepted" : "skipped";
+    if (accept) send("glossaryAdd", { course: $("course").value, corrections: [{ heard: c.heard, correct: c.correct }] }); }
+}
+function afterDecide() { $("words").textContent = wordCount().toLocaleString() + " words"; markFixes(); renderGloss(); }
+$("checkBtn").onclick = () => startCheck();
+$("glossView").addEventListener("click", (e) => {
+  if (e.target.id === "ckStart") return startCheck();
+  if (e.target.id === "ckAll" || e.target.id === "ckNone") {
+    const yes = e.target.id === "ckAll";
+    check.fixes.forEach((_, i) => decide("fix", i, yes)); check.corrections.forEach((_, i) => decide("corr", i, yes));
+    return afterDecide();
+  }
+  const b = e.target.closest("[data-ck]"); if (b) { decide(b.dataset.ck, +b.dataset.i, b.dataset.do === "accept"); return afterDecide(); }
+  const a = e.target.closest("[data-fix] a"); if (!a) return;
+  const f = check.fixes[+a.closest("[data-fix]").dataset.fix], row = $("segs").children[fixLine(f)];
+  if (!row) return goToTime(fmt(f.t));
+  follow = false; row.scrollIntoView({ behavior: "smooth", block: "center" });
+  row.classList.remove("flash"); void row.offsetWidth; row.classList.add("flash");
+});
+$("glossBtn").onclick = () => { glossOpen = true; setOpen = docsOpen = false; renderGloss(); loadGloss(); };
+$("tabSlides").onclick = () => { glossOpen = setOpen = docsOpen = false; renderGloss(); };
+$("docsBtn").onclick = () => { docsOpen = true; glossOpen = setOpen = false; renderGloss(); Docs.render(); };
+for (const d of document.querySelectorAll(".dock-model")) d.onclick = () => $("setBtn").click();
 // The ▾ menu of Make slides: model, reasoning and the rarer actions. Clicking an action or
 // anywhere outside closes it; changing the model or reasoning keeps it open.
 $("moreBtn").onclick = (e) => { e.stopPropagation(); $("moreMenu").classList.toggle("open"); };
@@ -596,13 +967,19 @@ $("moreMenu").onclick = (e) => { if (!e.target.closest("button")) e.stopPropagat
 document.addEventListener("click", () => $("moreMenu").classList.remove("open"));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("moreMenu").classList.remove("open"); });
 function renderDockModel() {
-  $("dockModelTxt").textContent = `${$("aiModel").selectedOptions[0]?.text || "Claude"}, ${($("effort").selectedOptions[0]?.text || "").toLowerCase()} reasoning`;
+  const t = `${$("aiModel").selectedOptions[0]?.text || "Claude"}, ${($("effort").selectedOptions[0]?.text || "").toLowerCase()} reasoning`;
+  for (const d of document.querySelectorAll(".dockModelTxt")) d.textContent = t;
 }
 
 /* settings: slide language and theme */
-let setOpen = false, themeBusy = false;
+let setOpen = false, themeBusy = false, docsOpen = false;
 function showPanels() {
-  const view = setOpen ? "settings" : glossOpen ? "gloss" : "slides";
+  const view = setOpen ? "settings" : glossOpen ? "gloss" : docsOpen ? "docs" : "slides";
+  if (view !== "docs" && $("docsView").style.display !== "none") Docs.saveNow();
+  $("docsView").style.display = view === "docs" ? "" : "none";
+  $("docsBtn").classList.toggle("on", view === "docs");
+  $("presentBtn").style.display = view === "slides" ? "" : "none";
+  if (view === "docs") requestAnimationFrame(Docs.fitCharts);
   $("setView").style.display = view === "settings" ? "" : "none";
   $("glossView").style.display = view === "gloss" ? "" : "none";
   for (const id of ["slideList", "slideBar", "spStatus"]) $(id).style.display = view === "slides" ? "" : "none";
@@ -624,10 +1001,10 @@ function setThemes(list, chosen) {
   $("themeDel").disabled = !sel.value;
 }
 function renderThemeMsg(msg, err) { const m = $("themeMsg"); m.textContent = msg || ""; m.className = err ? "err" : ""; $("themeMake").disabled = themeBusy; }
-$("setBtn").onclick = () => { setOpen = true; glossOpen = false; renderGloss(); };
+$("setBtn").onclick = () => { setOpen = true; glossOpen = docsOpen = false; renderGloss(); };
 $("slideLang").onchange = () => { persist(); renderedCount = -1; renderSlides(); };
 $("themeSel").onchange = () => { persist(); send("theme", { name: $("themeSel").value, path: curPath || "" }); };
-$("themeDel").onclick = () => { const n = $("themeSel").value; if (n && confirm(`Delete the theme “${n}”?`)) send("themeDelete", { name: n }); };
+$("themeDel").onclick = async () => { const n = $("themeSel").value; if (n && await ask(`Delete the theme “${n}”?`, "Delete")) send("themeDelete", { name: n }); };
 $("themeFolder").onclick = () => send("openThemes");
 $("themeMake").onclick = () => {
   const name = $("themeName").value.trim(), description = $("themeDesc").value.trim();
@@ -639,7 +1016,7 @@ $("glossView").addEventListener("click", (e) => {
   if (e.target.id === "matAdd") { matBusy = true; renderGloss(); send("materialAdd", { course: $("course").value }); return; }
   const b = e.target.closest(".g-x"); if (!b) return;
   const i = +b.dataset.i, kind = b.dataset.k;
-  if (kind === "material") { if (confirm(`Remove “${mat[i].name}” from the course material?`)) send("materialRemove", { course: $("course").value, name: mat[i].name }); return; }
+  if (kind === "material") { const name = mat[i].name; ask(`Remove “${name}” from the course material?`, "Remove").then(ok => ok && send("materialRemove", { course: $("course").value, name })); return; }
   const value = kind === "term" ? gloss.terms[i] : gloss.corrections[i].heard;
   send("glossaryRemove", { course: $("course").value, kind, value });
 });
@@ -659,6 +1036,7 @@ window.onEngine = (e) => {
       models = e.models; settings = e.settings || {}; modelBytes = e.modelBytes || 0;
       const firstInit = !window.inited; window.inited = true;
       onboarded = !!settings.onboarded;
+      slideStyle = settings.style && typeof settings.style === "object" ? settings.style : {};
       const m = $("model"); m.innerHTML = "";
       for (const x of models) m.add(new Option(x.label, x.path));
       if (models.some(x => x.path === settings.model)) m.value = settings.model;
@@ -717,11 +1095,32 @@ window.onEngine = (e) => {
       break;
     }
     case "themeError": themeBusy = false; renderThemeMsg(e.message, true); break;
+    case "styleSample": {
+      styleBusy = false; styleSample = e; styleMsg = null;
+      if (e.rules != null) { slideStyle.rules = e.rules; persist(); }
+      renderSetup();
+      break;
+    }
+    case "styleError": styleBusy = false; styleMsg = { text: e.message, err: true }; renderSetup(); break;
     case "modelProgress": dl = { done: e.done, total: e.total }; renderSetup(); break;
     case "modelDownloaded": dl = null; toast("Speech model downloaded"); break;
     case "modelDownloadError": dl = { error: e.message }; renderSetup(); toast(e.message, true); break;
     case "micTest": mic = e; renderSetup(); break;
     case "claudeCheck": claude = e; renderSetup(); break;
+    case "checkResult": {
+      if (!check || check.path !== e.path) break;
+      check = { path: e.path, fixes: e.fixes.map((f) => ({ ...f, st: "open" })), corrections: e.corrections.map((c) => ({ ...c, st: "open" })) };
+      // Terms are only context for Claude's next requests: added without asking.
+      if (e.terms?.length) send("glossaryAdd", { course: $("course").value, terms: e.terms });
+      glossOpen = true; setOpen = docsOpen = false; markFixes(); renderGloss(); renderSlidesBar();
+      toast(e.fixes.length ? `Check done: ${e.fixes.length} fix${e.fixes.length === 1 ? "" : "es"} to review in Glossary` : "Check done: no recognition errors found");
+      break;
+    }
+    case "checkError": {
+      if (!check || check.path !== e.path) break;
+      check = { path: e.path, error: e.message }; renderGloss(); renderSlidesBar(); toast(e.message, true);
+      break;
+    }
     case "glossary": {
       if (e.course !== $("course").value) break;
       gloss = { corrections: e.corrections || [], terms: e.terms || [] };
@@ -743,7 +1142,8 @@ window.onEngine = (e) => {
       if (follow) scrollLive();
       break;
     }
-    case "commit": addSeg(e.t, e.text); if (follow) scrollLive(); break;
+    case "commit": addSeg(e.t, e.text);
+      if (follow && !document.activeElement?.closest?.("#segs")) scrollLive(); break;
     case "level": {
       const pct = Math.max(0, Math.min(100, (e.db + 60) / 50 * 100));
       $("meter").firstChild.style.width = pct + "%"; break;
@@ -770,6 +1170,27 @@ window.onEngine = (e) => {
       toast("Transcript saved: " + name);
       break;
     }
+    case "lineEdited": {
+      if (e.path !== curPath) break;
+      // The file's lines are what count: fix up times (and anything that drifted), and keep
+      // whatever line is being typed in.
+      const rows = [...$("segs").children].filter(r => !r.classList.contains("new"));
+      const typing = document.activeElement?.closest?.("#segs") || rows.length < $("segs").children.length;
+      // While recording, a line can be added between the edit and this reply: the next one catches up.
+      if (rows.length !== e.lines.length) {
+        if (typing || state !== "idle") break;
+        const top = $("scroller").scrollTop; clearTranscript();
+        for (const [t, text] of e.lines) addSeg(t, text, true);
+        $("scroller").scrollTop = top;
+      } else e.lines.forEach(([t, text], i) => {
+        segs[i] = { t, text }; const r = rows[i]; r.dataset.t = t; r.querySelector(".ts span").textContent = fmt(t);
+        if (document.activeElement !== r.lastChild && r.lastChild.textContent !== text) r.lastChild.textContent = text;
+      });
+      $("words").textContent = wordCount().toLocaleString() + " words";
+      markFixes();
+      send("slidesState", { path: curPath });
+      break;
+    }
     case "transcript": {
       clearTranscript(); elapsed = 0; runStart = null;
       $("title").value = e.title === "Lecture" ? "" : e.title;
@@ -778,14 +1199,14 @@ window.onEngine = (e) => {
       $("scroller").scrollTop = 0; follow = false;
       const s = $("saved"); s.innerHTML = " · <a id='openT'></a>"; $("openT").textContent = e.path.split("/").pop();
       $("openT").onclick = () => send("reveal", { path: e.path });
-      curPath = null; setCurPath(e.path);
+      curPath = null; setCurPath(e.path); markFixes();
       break;
     }
     case "slides": {
       if (e.path !== curPath) break;
       const before = lectureSlides();
       const wasBusy = slidesBusy && e.added != null;
-      if (e.added != null) slidesBusy = false;
+      if (e.added != null) { slidesBusy = false; $("slideHint").value = ""; }
       slidesErr = "";
       deck = e;
       if (wasBusy && e.reviewed) {
@@ -807,6 +1228,7 @@ window.onEngine = (e) => {
       } else renderSlides();
       break;
     }
+    default: if (/^doc/.test(e.type)) Docs.on(e); break;
     case "slidesError": {
       if (e.path && e.path !== curPath) break;
       slidesBusy = false; slidesErr = e.message; renderSlidesBar();
@@ -830,9 +1252,9 @@ $("startBtn").onclick = () => {
   send("start", { model: m.path, modelLabel: m.label, device: $("device").value, language: $("lang").value,
     title: $("title").value, saveAudio: $("saveAudio").checked, course: $("course").value });
 };
-$("contBtn").onclick = () => {
+$("contBtn").onclick = async () => {
   const name = curPath.split("/").pop().replace(/\.md$/, "");
-  if (!confirm(`Continue recording into "${name}"? New lines are added after ${fmt(segs[segs.length - 1].t)}, and its slides pick up from there.`)) return;
+  if (!await ask(`Continue recording into "${name}"? New lines are added after ${fmt(segs[segs.length - 1].t)}, and its slides pick up from there.`, "Continue recording")) return;
   elapsed = segs[segs.length - 1].t; runStart = null; follow = true;
   $("empty").style.display = "none"; $("saved").innerHTML = "";
   const m = curModel();
@@ -848,9 +1270,11 @@ $("model").onchange = () => { persist(); modelReady = false; render(); send("pre
 for (const id of ["device", "lang", "saveAudio"]) $(id).onchange = () => { persist(); render(); };
 /* ---------- first-run setup ---------- */
 const CLAUDE_SVG = `/*CLAUDE_SVG*/`;
-const STEPS = ["welcome", "model", "mic", "slides", "course"];
-function openSetup(step) { setupStep = step || 0; $("setup").classList.add("on"); renderSetup(); }
-function closeSetup() { $("setup").classList.remove("on"); onboarded = true; persist(); }
+const STEPS = ["welcome", "model", "mic", "slides", "course", "style"];
+// `single`: just that page (Settings → Slide style), with Done instead of the step buttons.
+function openSetup(step, single) { setupStep = step || 0; styleSingle = !!single; $("setup").classList.add("on"); renderSetup(); }
+function closeSetup() { $("setup").classList.remove("on"); onboarded = true; persist(); renderSlides(); }
+$("styleBtn").onclick = () => openSetup(STEPS.indexOf("style"), true);
 $("setupBtn").onclick = () => openSetup(0);
 // The setup's own fields mirror the main controls: copy options in, write changes back.
 function mirror(id, from) {
@@ -865,14 +1289,17 @@ function renderSetup() {
   $("suBack").style.visibility = setupStep ? "" : "hidden";
   $("suNext").textContent = setupStep === STEPS.length - 1 ? "Start using it" : "Next";
   $("suNext").disabled = false;
-  const b = $("suBody");
+  $("setup").firstElementChild.classList.toggle("single", styleSingle);
+  $("setup").firstElementChild.classList.toggle("wide", step === "style");
+  if (styleSingle) $("suNext").textContent = "Done";
+  const b = $("suBody"), stepOf = `Step ${setupStep} of ${STEPS.length - 1}`;
   if (step === "welcome") {
     b.innerHTML = `<p class="eyebrow">Welcome</p><h1>Transcribe Lecture</h1>
       <p>Live transcripts on your Mac, and slides made from what was said.</p>
       <p class="note">Ask the lecturer before recording.</p>`;
   } else if (step === "model") {
     const m = models[0];
-    b.innerHTML = `<p class="eyebrow">Step 1 of 4</p><h1>Speech model</h1>
+    b.innerHTML = `<p class="eyebrow">${stepOf}</p><h1>Speech model</h1>
       <p>Parakeet V3 runs on this Mac and understands 25 European languages.</p>
       <div class="box" id="suModel"></div>`;
     const box = $("suModel");
@@ -883,7 +1310,7 @@ function renderSetup() {
     if ($("suDl")) $("suDl").onclick = () => { dl = { done: 0, total: modelBytes }; send("downloadModel"); renderSetup(); };
     if (!m) $("suNext").textContent = "Skip for now";
   } else if (step === "mic") {
-    b.innerHTML = `<p class="eyebrow">Step 2 of 4</p><h1>Microphone</h1>
+    b.innerHTML = `<p class="eyebrow">${stepOf}</p><h1>Microphone</h1>
       <p>Press Test and say something.</p>
       <div class="box"><label>Microphone <select id="suDevice"></select></label>
       <div class="row"><button id="suMic">Test</button><span id="suMicRes"></span></div></div>`;
@@ -898,7 +1325,7 @@ function renderSetup() {
     $("suMic").onclick = () => { mic = "busy"; renderSetup(); send("micTest", { device: $("device").value }); };
   } else if (step === "slides") {
     if (!claude) send("checkClaude");
-    b.innerHTML = `<p class="eyebrow">Step 3 of 4</p><h1><span class="claude-mark">${CLAUDE_SVG}</span>Slides</h1>
+    b.innerHTML = `<p class="eyebrow">${stepOf}</p><h1><span class="claude-mark">${CLAUDE_SVG}</span>Slides</h1>
       <p>Claude Code makes them, on your Claude subscription.</p>
       <div class="box"><div id="suClaude">Looking for Claude Code…</div>
         <label>Model <select id="suModelSel"></select></label>
@@ -908,8 +1335,10 @@ function renderSetup() {
     if (claude && claude.found) c.innerHTML = `<span class="ok">✓ Claude Code is installed</span>`;
     else if (claude) c.innerHTML = `<span class="bad">Claude Code isn't installed.</span> Run this in Terminal, then <code>claude</code> once to log in:<pre style="margin:8px 0">curl -fsSL https://claude.ai/install.sh | bash</pre><button id="suRecheck">Check again</button>`;
     if ($("suRecheck")) $("suRecheck").onclick = () => { claude = null; renderSetup(); };
+  } else if (step === "style") {
+    renderStyle(b, stepOf);
   } else {
-    b.innerHTML = `<p class="eyebrow">Step 4 of 4</p><h1>Your course</h1>
+    b.innerHTML = `<p class="eyebrow">${stepOf}</p><h1>Your course</h1>
       <div class="box">
         <label>Course <input id="suCourse" class="field-in" placeholder="e.g. Computer Networks" spellcheck="false"></label>
         <label>Lecture language <select id="suLang"></select></label>
@@ -923,7 +1352,83 @@ function renderSetup() {
   }
 }
 $("suBack").onclick = () => { setupStep = Math.max(0, setupStep - 1); renderSetup(); };
-$("suNext").onclick = () => { if (setupStep === STEPS.length - 1) closeSetup(); else { setupStep++; renderSetup(); } };
+$("suNext").onclick = () => { if (styleSingle || setupStep === STEPS.length - 1) closeSetup(); else { setupStep++; renderSetup(); } };
+
+/* ---------- slide style page (a setup step, and Settings → Slide style) ---------- */
+// Each control's first option is the default (adds nothing to the prompt; see slides::style_rules).
+const STYLE = [
+  { k: "density", name: "Density", opts: [["balanced", "Balanced"], ["minimal", "Minimal"], ["detailed", "Detailed"]],
+    hint: { balanced: "One idea per slide, 2–4 short points.", minimal: "Few words, more slides. Good for following live.", detailed: "Fuller slides you can study from without the transcript." } },
+  { k: "titles", name: "Titles", opts: [["statement", "Statement"], ["topic", "Topic"], ["question", "Question"]],
+    hint: { statement: "The point itself: “TTL prevents loops”.", topic: "Just the name: “Time to live”.", question: "What the slide answers: “What does TTL prevent?”. Good for self-testing." } },
+  { k: "items", name: "Points", opts: [["", "Balanced"], ["terse", "Short phrases"], ["sentences", "Sentences"]],
+    hint: { "": "Short sentences.", terse: "Telegraphic, like notes.", sentences: "Full sentences that read well weeks later." } },
+  { k: "notes", name: "Notes under slides", opts: [["short", "Short"], ["none", "None"], ["full", "Full"]],
+    hint: { short: "1–3 sentences with details that didn't fit.", none: "Only when something important would be lost.", full: "The explanation retold in order, to study from." } },
+  { k: "visuals", name: "Visuals", opts: [["balanced", "Balanced"], ["text", "Mostly text"], ["diagrams", "Diagrams"]],
+    hint: { balanced: "A diagram when there's something to draw.", text: "Lists, definitions and formulas.", diagrams: "Draw whatever can be drawn. Never invented, only what was said." } },
+];
+const styleVal = (c) => slideStyle[c.k] ?? c.opts[0][0];
+function styleSend(feedback) {
+  styleBusy = true; styleMsg = null;
+  send("styleSample", { course: $("course").value, model: $("aiModel").value, effort: $("effort").value, lang: slideLangCode(),
+    style: slideStyle, builtin: styleBuiltin, feedback: feedback || "", previous: feedback && styleSample ? styleSample.slides : null });
+  renderSetup();
+}
+function renderStyle(b, stepOf) {
+  const keepFb = $("stFb")?.value || "";
+  b.innerHTML = `<p class="eyebrow">${styleSingle ? "Settings" : stepOf}</p><h1>Slide style</h1>
+    <p>Choose how your slides are written. ${esc(engName())} makes three sample slides from a lecture so you can see the result, and you can tell it what to change.</p>
+    <div class="st"><div class="st-ctl">${STYLE.map((c) => `<div><h4>${c.name}</h4><div class="switch" data-k="${c.k}">${c.opts.map(([v, l]) =>
+      `<button data-v="${v}" class="${styleVal(c) === v ? "on" : ""}">${l}</button>`).join("")}</div><p class="hint">${c.hint[styleVal(c)]}</p></div>`).join("")}
+      <div><h4>Your rules</h4><textarea id="stRules" class="field-in" placeholder="- Always give the example the professor used&#10;- Keep English technical terms" spellcheck="false"></textarea>
+        <p class="hint">Plain rules, one per line. Changes you ask for on the right are added here.</p></div></div>
+    <div class="st-prev"><div class="st-src" id="stSrc"></div>
+      <div class="st-bar"><input id="stFb" class="field-in" placeholder="Tell ${esc(engName())} what to change: “shorter titles”, “add the professor's examples”…" spellcheck="false">
+        <button id="stApply">Apply</button><button id="stMake" class="go">Make samples</button></div>
+      <div class="st-msg" id="stMsg"></div><div id="stSlides"></div></div></div>`;
+  $("stRules").value = slideStyle.rules || "";
+  $("stRules").onchange = () => { slideStyle.rules = $("stRules").value.trim(); styleDirty(); };
+  b.querySelectorAll(".st-ctl .switch").forEach((sw) => sw.onclick = (e) => {
+    const v = e.target.closest("button")?.dataset.v; if (v == null) return;
+    slideStyle[sw.dataset.k] = v; styleDirty(); renderSetup();
+  });
+  $("stFb").value = keepFb;
+  $("stFb").onkeydown = (e) => { if (e.key === "Enter") $("stApply").click(); };
+  $("stApply").onclick = () => { const f = $("stFb").value.trim(); if (!f || styleBusy) return; $("stFb").value = ""; styleSend(f); };
+  $("stMake").onclick = () => !styleBusy && styleSend();
+  $("stMake").textContent = styleSample ? "Make new samples" : "Make samples";
+  $("stApply").disabled = $("stMake").disabled = styleBusy;
+  const src = $("stSrc");
+  src.innerHTML = `<span id="stSrcTxt"></span><a id="stSrcSw"></a>`;
+  $("stSrcTxt").textContent = styleSample ? "From " + styleSample.source : styleBuiltin ? "From the built-in sample lecture" : "From your latest lecture (or a built-in sample if there's none yet)";
+  $("stSrcSw").textContent = styleBuiltin ? "Use my latest lecture" : "Use the built-in sample";
+  $("stSrcSw").style.display = !styleBuiltin && /^Built-in/.test(styleSample?.source || "") ? "none" : ""; // no lecture yet
+  $("stSrcSw").onclick = () => { styleBuiltin = !styleBuiltin; styleSample = null; if (!styleBusy) styleSend(); };
+  const list = $("stSlides"), wait = `${esc(engName())} is writing three sample slides…`;
+  list.classList.toggle("busy", styleBusy && !!styleSample);
+  if (!styleSample) list.innerHTML = `<div class="st-wait">${styleBusy ? wait : "Press <b>Make samples</b> to see slides in this style."}</div>`;
+  else {
+    document.documentElement.lang = styleSample.lang || slideLangCode() || "en"; // fixed slide labels follow it
+    const sl = styleSample.slides, foot = [$("course").value.trim(), "Sample"].filter(Boolean).join(" · ");
+    list.innerHTML = sl.map((s, i) => `<div class="si" id="st${i}"><div class="fr">${renderSlide(s, i + 1, sl.length, foot)}</div>` +
+      (s.notes ? `<p class="si-notes"></p>` : "") + `</div>`).join("");
+    sl.forEach((s, i) => { const p = list.querySelector(`#st${i} .si-notes`); if (p) p.innerHTML = renderNotes(s.notes); });
+    requestAnimationFrame(() => { const fr = list.querySelector(".fr"); if (fr) list.style.setProperty("--k", fr.clientWidth / 1280); fitSlideText(list); });
+  }
+  const m = $("stMsg");
+  if (styleBusy) { m.className = "st-msg"; m.textContent = styleSample ? wait : ""; }
+  else if (styleMsg) { m.className = "st-msg" + (styleMsg.err ? " err" : styleMsg.dirty ? " dirty" : ""); m.textContent = styleMsg.text; }
+  else { m.className = "st-msg"; m.textContent = styleSample?.usage?.model ? `Made with ${engName(styleSample.usage.model)}. Your choices are saved and used for every new slide.` : ""; }
+  if (!styleSample && !styleBusy && !styleMsg) styleSend(); // first visit: show something right away
+}
+function styleDirty() {
+  persist();
+  if (!styleSample || styleBusy) return;
+  styleMsg = { text: "Changed. Press Make new samples to see it.", dirty: true };
+  const m = $("stMsg"); if (m) { m.className = "st-msg dirty"; m.textContent = styleMsg.text; }
+}
+new ResizeObserver(() => { const l = $("stSlides"), fr = l?.querySelector(".fr"); if (fr) l.style.setProperty("--k", fr.clientWidth / 1280); }).observe($("setup"));
 $("suSkip").onclick = closeSetup;
 
 $("smaller").onclick = () => { fontSize = Math.max(13, fontSize - 1); applyFont(); persist(); };
@@ -935,6 +1440,7 @@ $("copyBtn").onclick = () => {
 };
 document.addEventListener("keydown", (ev) => {
   if (ev.metaKey && ev.key === "Enter") {
+    if (ev.target.closest?.("#docsView, #dpop")) return; // in a doc: not the record shortcut
     ev.preventDefault();
     if (ev.shiftKey) return makeSlides("next");
     if (state === "idle") $("startBtn").click(); else $("stopBtn").click();
@@ -944,5 +1450,6 @@ render();
 document.fonts && document.fonts.ready.then(() => fitSlideText($("slideList")));
 send("ready");
 </script>
+<script>/*DOCS_JS*/</script>
 </body>
 </html>

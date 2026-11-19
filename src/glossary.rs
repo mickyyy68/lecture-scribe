@@ -46,6 +46,12 @@ fn save(course: &str, v: &Value) -> Result<(), String> {
     std::fs::write(&tmp, serde_json::to_string_pretty(v).unwrap()).and_then(|_| std::fs::rename(&tmp, &p)).map_err(|e| e.to_string())
 }
 
+/// A correction the engine can safely apply everywhere: a short, single-line form that differs
+/// from its fix by more than letter case.
+pub fn valid_correction(heard: &str, correct: &str) -> bool {
+    (3..=40).contains(&heard.chars().count()) && !correct.is_empty() && !heard.contains('\n') && heard.to_lowercase() != correct.to_lowercase()
+}
+
 /// Adds the model's suggestions; returns how many corrections and terms were new.
 pub fn merge(course: &str, suggested: &Value) -> (usize, usize) {
     let mut g = load(course);
@@ -54,11 +60,7 @@ pub fn merge(course: &str, suggested: &Value) -> (usize, usize) {
     for c in suggested["corrections"].as_array().into_iter().flatten() {
         let heard = c["heard"].as_str().unwrap_or("").trim();
         let correct = c["correct"].as_str().unwrap_or("").trim();
-        let ok = heard.chars().count() >= 3
-            && heard.chars().count() <= 40
-            && !correct.is_empty()
-            && !heard.contains('\n')
-            && heard.to_lowercase() != correct.to_lowercase();
+        let ok = valid_correction(heard, correct);
         let known = g["corrections"].as_array().unwrap().iter().any(|x| x["heard"].as_str().unwrap_or("").to_lowercase() == heard.to_lowercase());
         if ok && !known {
             g["corrections"].as_array_mut().unwrap().push(json!({ "heard": heard, "correct": correct, "added": today }));
