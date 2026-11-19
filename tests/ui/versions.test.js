@@ -150,3 +150,17 @@ T.test("suggested corrections wait in the Glossary until accepted or skipped", a
   T.ok(/1 of 2 added/.test($("sgSec").textContent));
   T.ok(!$("moreBtn").classList.contains("badge"), "nothing left to review");
 });
+
+T.test("the Glossary shows every row's words when the course has material", async () => {
+  await T.open();
+  await cleanUp([{ heard: "Grady and", correct: "gradient" }]);
+  await T.until(() => $("sgSec"), "the Glossary opens on the suggestions");
+  const course = $("course").value;
+  T.fire({ type: "material", course, files: [{ name: "Slides week 1.pdf", pages: 40, emptyPages: 0 }] });
+  T.fire({ type: "glossary", course, corrections: [{ heard: "Ada Grad", correct: "AdaGrad" }], terms: ["backpropagation"] });
+  const body = $("glossBody");
+  T.eq([...body.querySelectorAll("[data-corr]")].map((r) => r.querySelector("del").textContent + "→" + r.querySelector("b").textContent), ["Grady and→gradient"]);
+  T.eq([...body.querySelectorAll(".m-row .c")].map((el) => el.textContent), ["Slides week 1.pdf"]);
+  T.eq([...body.querySelectorAll(".g-corr")].map((r) => r.querySelector(".h").textContent + "→" + r.querySelector(".c").textContent), ["Ada Grad→AdaGrad"]);
+  T.eq([...body.querySelectorAll(".g-term > span")].map((el) => el.textContent), ["backpropagation"]);
+});
