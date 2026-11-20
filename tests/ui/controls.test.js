@@ -244,3 +244,21 @@ T.test("Rename isn't offered without a lecture, nor while recording", async () =
   await T.click("#lecBtn");
   T.ok($("lecRename").disabled && /Stop the recording/.test($("lecRename").title), "disabled while recording");
 });
+
+// At the app's default width (980), a long title and microphone name once pushed Stop onto a
+// second row under the title while recording.
+T.test("the header stays on one row while recording, at the app's default width", async () => {
+  document.body.style.width = "980px";
+  await T.open();
+  T.fire({ type: "renamed", from: T.PATH, path: T.PATH, title: "Word embeddings e Word2vec, parte seconda", lines: T.LINES.map((l) => [...l]), recent: T.RECENT });
+  T.fire({ type: "state", state: "recording", device: "MacBook Pro Microphone (built-in)" });
+  await T.wait(50);
+  const row = document.querySelector("header > .row"), top = row.getBoundingClientRect().top;
+  const shown = [...row.children].filter((e) => e.offsetParent && e.getBoundingClientRect().width);
+  const r = (id) => $(id).getBoundingClientRect();
+  T.eq(shown.filter((e) => e.getBoundingClientRect().top - top > 20).map((e) => e.id), [], "on a second row");
+  T.ok(r("stopBtn").right <= 980, `Stop ends at ${r("stopBtn").right}`);
+  T.ok(r("title").width >= 120, `title ${r("title").width}px wide`);
+  T.ok(/Recording/.test($("status").textContent), $("status").textContent);
+  await T.shot("header-recording-narrow");
+});

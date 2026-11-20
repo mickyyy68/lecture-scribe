@@ -55,6 +55,18 @@ fn main() {
     if args.iter().any(|a| a == "--dump-ui") {
         return print!("{}", ui());
     }
+    // For the README screenshot (scripts/screenshot.sh): the `init`, `transcript` and `slides`
+    // events the window gets when this lecture is opened.
+    if let Some(i) = args.iter().position(|a| a == "--dump-lecture") {
+        let t = std::path::Path::new(args.get(i + 1).map(String::as_str).unwrap_or(""));
+        match (slides::transcript_payload(t), slides::state(t)) {
+            (Ok(transcript), Ok(slides)) => return println!("{}", serde_json::json!({ "init": init_payload(), "transcript": transcript, "slides": slides })),
+            (Err(e), _) | (_, Err(e)) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
     if args.iter().any(|a| a == "--mcp-material") {
         let course = args.iter().position(|a| a == "--course").and_then(|j| args.get(j + 1)).cloned().unwrap_or_default();
         return material::serve_mcp(&course);

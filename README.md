@@ -2,7 +2,7 @@
 
 A macOS app that transcribes lectures live, on your Mac, and turns what was said into slides you can study from.
 
-![Transcribe Lecture: a lecture's transcript on the left, the slides made from it on the right](docs/screenshot.png)
+![Transcribe Lecture recording a lecture: the live transcript on the left, the slides made from it so far on the right](docs/screenshot.png)
 
 - **Live transcription on the Mac.** It uses NVIDIA's Parakeet V3 speech model (25 European languages; GGUF, via [`transcribe-cpp`](https://crates.io/crates/transcribe-cpp)) on the GPU with Metal. Audio never leaves the computer.
 - **Slides on demand.** Press **Make slides** whenever you like, and everything said since the last time becomes slides. They can hold diagrams, tables, plots, formulas (LaTeX), pseudocode and code. Claude Code makes them, on your Claude subscription, with the model and reasoning effort you choose.
