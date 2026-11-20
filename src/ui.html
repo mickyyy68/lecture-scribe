@@ -17,6 +17,10 @@
   body { display: flex; flex-direction: column; }
   ::selection { background: var(--app-accent-soft); }
   header { padding: 12px 20px 10px; border-bottom: 1px solid var(--app-line); background: var(--app-bg); }
+  /* One row at any window width: when it's short of room the title, course, status and meter
+     shrink (the status ends in "…"), never the buttons, which would otherwise wrap below. */
+  header > .row { flex-wrap: nowrap; }
+  header > .row > button { flex: none; }
   .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   /* The lecture's name is the lecture picker: with a lecture open it's read-only and a click opens
      #lecMenu; with none (a new lecture) it's the field that names the next recording. */
@@ -46,7 +50,7 @@
   kbd { font: 500 var(--app-text-xs) var(--app-mono); opacity: .65; margin-left: 6px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; margin-right: 7px; vertical-align: 1px; }
   #timer { font: 600 17px var(--app-mono); min-width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
-  #meter { width: 90px; height: 5px; border-radius: var(--app-r-pill); background: var(--app-sunken); box-shadow: inset 0 0 0 1px var(--app-line); overflow: hidden; }
+  #meter { flex: 0 1 90px; min-width: 40px; height: 5px; border-radius: var(--app-r-pill); background: var(--app-sunken); box-shadow: inset 0 0 0 1px var(--app-line); overflow: hidden; }
   #meter > div { height: 100%; width: 0; background: var(--app-ok); transition: width .08s linear; }
   /* Header menus open below their button: the lecture picker (#lecName → #lecMenu) and the
      recording settings after Start/Continue (#recSetBtn → #recMenu, icon + chevron). */
@@ -101,7 +105,7 @@
   .pk-opt.sel::before { content: ""; position: absolute; left: 11px; top: 50%; width: 8px; height: 4px; margin-top: -4px;
     border: solid var(--app-accent); border-width: 0 0 1.6px 1.6px; transform: rotate(-45deg); }
   .pk-opt.dis { opacity: .45; }
-  #status { font-size: var(--app-text-sm); color: var(--app-fg2); white-space: nowrap; }
+  #status { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--app-text-sm); color: var(--app-fg2); white-space: nowrap; }
   #status.rec { color: var(--app-danger); font-weight: 600; }
   #status.paused { color: var(--app-warn); font-weight: 600; }
 
