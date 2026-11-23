@@ -1728,6 +1728,8 @@ $("divider").addEventListener("mousedown", (e) => {
 /* ---------- engine events ---------- */
 window.onEngine = (e) => {
   switch (e.type) {
+    // Claude made drawings: say what's wrong with them once drawn (slides.js checkSvg).
+    case "svgCheck": svgCheckReply(e); break;
     case "init": {
       models = e.models; settings = e.settings || {}; modelBytes = e.modelBytes || 0;
       const firstInit = !window.inited; window.inited = true;

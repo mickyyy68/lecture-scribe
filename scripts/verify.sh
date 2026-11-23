@@ -6,7 +6,7 @@
 #   scripts/verify.sh --ui NAME  only the UI tests whose file or name contains NAME
 #
 # Steps: release build with no warnings, unit tests, UI script syntax, UI tests in WebKit (the
-# app's real page, driven by real mouse and key events: tests/ui), engine tests (Parakeet on
+# app's real page and an exported deck, driven by real mouse and key events: tests/ui), engine tests (Parakeet on
 # speech made with `say`: tests/engine.rs).
 #
 # Safe while a lecture is recording: nothing touches the installed app, the user's lectures or
@@ -59,6 +59,9 @@ if [[ ! -x $RUNNER || tests/ui/runner.swift -nt $RUNNER ]]; then
 fi
 rm -rf $OUT/shots
 if [[ -x $RUNNER ]] && $RUNNER $OUT/page.html tests/ui/prelude.js $OUT/shots tests/ui/*.test.js $ONLY; then pass "UI tests"; else fail "UI tests"; fi
+# The exported deck (presenting, builds), from a fixture deck.
+target/release/transcribe-lecture --dump-deck tests/ui/deck/slides.json > $OUT/deck.html
+if [[ -x $RUNNER ]] && $RUNNER $OUT/deck.html tests/ui/prelude.js $OUT/shots tests/ui/deck/*.test.js $ONLY; then pass "deck UI tests"; else fail "deck UI tests"; fi
 
 if (( QUICK )); then
   RESULTS+=("- engine tests skipped (--quick)")

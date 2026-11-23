@@ -8,5 +8,6 @@ pub mod models;
 pub mod paths;
 pub mod slides;
 pub mod spell;
+pub mod svg;
 pub mod theme;
 pub mod versions;

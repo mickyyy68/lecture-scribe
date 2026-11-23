@@ -1,6 +1,6 @@
 use transcribe_lecture::engine::{self, Cmd, Event, Source, StartOpts};
 use transcribe_lecture::paths::{self, out_dir};
-use transcribe_lecture::{audio, clean, docs, glossary, material, models, slides, spell, theme, versions};
+use transcribe_lecture::{audio, clean, docs, glossary, material, models, slides, spell, svg, theme, versions};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use tao::{
@@ -55,6 +55,14 @@ fn main() {
     if args.iter().any(|a| a == "--dump-ui") {
         return print!("{}", ui());
     }
+    // For the deck's UI tests (tests/ui/deck): the exported deck of a JSON list of slides.
+    if let Some(i) = args.iter().position(|a| a == "--dump-deck") {
+        let slides: Value = std::fs::read_to_string(args.get(i + 1).map(String::as_str).unwrap_or("")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_else(|| {
+            eprintln!("error: give a JSON file holding a list of slides");
+            std::process::exit(1)
+        });
+        return print!("{}", slides::deck_html(slides.as_array().map_or(&[][..], |a| a), "en", "Test", ""));
+    }
     // For the README screenshot (scripts/screenshot.sh): the `init`, `transcript` and `slides`
     // events the window gets when this lecture is opened.
     if let Some(i) = args.iter().position(|a| a == "--dump-lecture") {
@@ -105,15 +113,37 @@ fn main() {
     // Headless: `transcribe-lecture --draft file.md [--course X] [--model sonnet] [--effort high] [--lang it] [--hint "…"]`.
     // A real Claude Code call; writes the notes into "<lecture> · Docs/", so run it on a copy.
     if let Some(i) = args.iter().position(|a| a == "--draft") {
-        let opt = |k: &str| args.iter().position(|a| a == k).map(|j| args[j + 1].clone()).unwrap_or_default();
-        match docs::draft(std::path::Path::new(&args[i + 1]), &opt("--course"), &opt("--model"), &opt("--effort"), &opt("--lang"), &opt("--hint")) {
-            Ok(v) => println!("saved {}\nusage: {}\nlookups: {}", v["doc"].as_str().unwrap_or(""), v["usage"], v["lookups"]),
-            Err(e) => eprintln!("error: {e}"),
-        }
-        return;
+        with_drawing_page(move || {
+            let opt = |k: &str| args.iter().position(|a| a == k).map(|j| args[j + 1].clone()).unwrap_or_default();
+            match docs::draft(std::path::Path::new(&args[i + 1]), &opt("--course"), &opt("--model"), &opt("--effort"), &opt("--lang"), &opt("--hint")) {
+                Ok(v) => println!("saved {}\nusage: {}\nlookups: {}", v["doc"].as_str().unwrap_or(""), v["usage"], v["lookups"]),
+                Err(e) => eprintln!("error: {e}"),
+            }
+        });
+    }
+    // Headless: `transcribe-lecture --check-svg drawing.svg [width]`: what the check after
+    // generation (svg.rs) finds wrong with a drawing that fills `width` px (default 540).
+    if let Some(i) = args.iter().position(|a| a == "--check-svg") {
+        with_drawing_page(move || {
+            let src = std::fs::read_to_string(args.get(i + 1).map(String::as_str).unwrap_or("")).unwrap_or_else(|e| {
+                eprintln!("error: {e}");
+                std::process::exit(1)
+            });
+            let width = args.get(i + 2).and_then(|w| w.parse().ok()).unwrap_or(svg::COLUMN);
+            let mut out = None;
+            let _ = svg::repair(&[svg::Item { svg: src, width }], &mut |a| {
+                out = Some(a[0].2.clone());
+                Ok(vec![])
+            });
+            match out {
+                None => println!("ok"),
+                Some(p) => p.iter().for_each(|p| println!("- {p}")),
+            }
+        });
     }
     // Headless: `transcribe-lecture --slides transcript.md [--course "Networks"] [--model opus] [--effort high] [--lang it] [--hint "…"]`
     if let Some(i) = args.iter().position(|a| a == "--slides") {
+        with_drawing_page(move || {
         let course = args.iter().position(|a| a == "--course").map(|j| args[j + 1].clone()).unwrap_or_default();
         let model = args.iter().position(|a| a == "--model").map(|j| args[j + 1].clone()).unwrap_or_else(|| slides::DEFAULT_MODEL.into());
         let effort = args.iter().position(|a| a == "--effort").map(|j| args[j + 1].clone()).unwrap_or_else(|| slides::DEFAULT_EFFORT.into());
@@ -128,16 +158,18 @@ fn main() {
         let hint = args.iter().position(|a| a == "--hint").map(|j| args[j + 1].clone()).unwrap_or_default();
         match slides::generate(std::path::Path::new(&args[i + 1]), &course, mode, &model, &effort, &lang, &hint) {
             Ok(v) => println!(
-                "{} slides (+{}, replaced last: {}, flagged: {}) · usage {}",
+                "{} slides (+{}, replaced last: {}, flagged: {}, drawings fixed/dropped: {}/{}) · usage {}",
                 v["slides"].as_array().map_or(0, |a| a.len()),
                 v["added"],
                 v["replaced"],
                 v["flagged"],
+                v["drawings"]["fixed"],
+                v["drawings"]["dropped"],
                 v["usage"]
             ),
             Err(e) => eprintln!("error: {e}"),
         }
-        return;
+        });
     }
     // Headless: `transcribe-lecture --make-theme "Name" "description" [--model opus]`
     if let Some(i) = args.iter().position(|a| a == "--make-theme") {
@@ -259,6 +291,8 @@ fn main() {
                 "cancel" => {
                     slides::cancel(&s("kind"));
                 }
+                // The page's answer to an `svgCheck` (svg.rs).
+                "svgChecked" => svg::answered(&msg),
                 "slidesState" | "slidesUndo" => {
                     let path = PathBuf::from(s("path"));
                     let r = if msg["cmd"] == "slidesUndo" { slides::undo(&path) } else { slides::state(&path) };
@@ -538,6 +572,12 @@ fn main() {
         .build(&window)
         .expect("webview");
 
+    // Drawings Claude makes are measured in this page (svg.rs).
+    let svg_proxy = std::sync::Mutex::new(proxy.clone());
+    svg::connect(move |ev| {
+        let _ = svg_proxy.lock().unwrap().send_event(ev);
+    });
+
     let menu = app_menu();
     // Edit → Find… / Find Next / Find Previous: the page's find bar (it also handles the keys
     // itself, so the menu item only acts when the page didn't).
@@ -566,6 +606,61 @@ fn main() {
             _ => {}
         }
     });
+}
+
+/// Runs a headless mode `f` that makes drawings with a page to measure them (svg.rs): the
+/// drawing page in a hidden window, with no Dock icon. Exits when `f` returns.
+fn with_drawing_page(f: impl FnOnce() + Send + 'static) -> ! {
+    use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
+    let mut event_loop = EventLoopBuilder::<String>::with_user_event().build();
+    event_loop.set_activation_policy(ActivationPolicy::Prohibited);
+    let window = WindowBuilder::new().with_visible(false).with_inner_size(LogicalSize::new(1280.0, 800.0)).build(&event_loop).expect("window");
+    let (ready, loaded) = std::sync::mpsc::channel::<()>();
+    let ready = std::sync::Mutex::new(ready);
+    let webview = WebViewBuilder::new()
+        .with_html(drawing_page())
+        .with_ipc_handler(move |req| {
+            if let Ok(msg) = serde_json::from_str::<Value>(req.body()) {
+                match msg["cmd"].as_str() {
+                    Some("svgChecked") => svg::answered(&msg),
+                    Some("ready") => drop(ready.lock().unwrap().send(())),
+                    _ => {}
+                }
+            }
+        })
+        .build(&window)
+        .expect("webview");
+    let proxy = std::sync::Mutex::new(event_loop.create_proxy());
+    svg::connect(move |ev| {
+        let _ = proxy.lock().unwrap().send_event(ev);
+    });
+    std::thread::spawn(move || {
+        if loaded.recv_timeout(std::time::Duration::from_secs(15)).is_err() {
+            eprintln!("warning: the drawing page didn't load; drawings won't be checked");
+        }
+        f();
+        std::process::exit(0);
+    });
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
+        if let TaoEvent::UserEvent(js) = event {
+            let _ = webview.evaluate_script(&format!("window.onEngine({js})"));
+        }
+    })
+}
+
+/// The page that measures drawings in the headless modes: the slide renderer with the theme,
+/// answering `svgCheck` like the app's page does.
+fn drawing_page() -> String {
+    format!(
+        "<!doctype html><html lang=\"en\" data-theme=\"light\"><head><meta charset=\"utf-8\"><style>{}</style><style>{}</style><style>{}</style><style>{}</style></head><body>\
+         <script>{}</script><script>window.onEngine = (e) => {{ if (e.type === \"svgCheck\") svgCheckReply(e); }}; window.ipc.postMessage('{{\"cmd\":\"ready\"}}');</script></body></html>",
+        theme::BASE_CSS,
+        theme::DEFAULT_CSS,
+        theme::current(),
+        slides::SLIDES_CSS,
+        slides::SLIDES_JS
+    )
 }
 
 /// The menu bar. Without an Edit menu, macOS doesn't send Cut, Copy, Paste, Select All and

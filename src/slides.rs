@@ -112,25 +112,29 @@ fn display_title(deck: &Value, title: &str) -> String {
 fn save(t: &Path, deck: &Value, title: &str) -> Result<(), String> {
     write_atomic(&deck_path(t, ".json"), &serde_json::to_string_pretty(deck).unwrap())?;
     let title = display_title(deck, title);
-    let slides = slides_of(deck);
-    let course = deck["course"].as_str().unwrap_or("");
+    let html = deck_html(&slides_of(deck), deck["lang"].as_str().unwrap_or("en"), &title, deck["course"].as_str().unwrap_or(""));
+    write_atomic(&deck_path(t, ".html"), &html)
+}
+
+/// The exported deck (deck.html) of these slides, with the current theme.
+pub fn deck_html(slides: &[Value], lang: &str, title: &str, course: &str) -> String {
     let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
     let js_json = |v: &Value| v.to_string().replace("</", "<\\/");
+    let data = Value::Array(slides.to_vec());
     let html = DECK_HTML
-        .replace("{{LANG}}", &esc(deck["lang"].as_str().unwrap_or("en")))
+        .replace("{{LANG}}", &esc(lang))
         .replace("{{TITLE}}", &esc(&format!("{title} · Slides")))
         .replace("{{BUNDLE}}", crate::theme::BASE_CSS)
         .replace("{{TOKENS}}", crate::theme::DEFAULT_CSS)
         .replace("{{THEME}}", &crate::theme::current().replace("</", "<\\/"))
         .replace("{{SLIDES_CSS}}", SLIDES_CSS)
         .replace("{{SLIDES_JS}}", SLIDES_JS)
-        .replace("{{FOOT}}", &js_json(&json!(foot(course, &title))))
-        .replace("{{DATA}}", &js_json(&Value::Array(slides)));
+        .replace("{{FOOT}}", &js_json(&json!(foot(course, title))))
+        .replace("{{DATA}}", &js_json(&data));
     // KaTeX (≈640 KB) only goes into decks that have math; it is inserted last, after the data.
-    let data = Value::Array(slides_of(deck)).to_string();
+    let data = data.to_string();
     let math = data.contains("\"type\":\"math\"") || data.contains('$');
-    let html = html.replace("{{KATEX_CSS}}", if math { KATEX_CSS } else { "" }).replace("{{KATEX_JS}}", if math { KATEX_JS } else { "" });
-    write_atomic(&deck_path(t, ".html"), &html)
+    html.replace("{{KATEX_CSS}}", if math { KATEX_CSS } else { "" }).replace("{{KATEX_JS}}", if math { KATEX_JS } else { "" })
 }
 
 /// Token counts. Runs are covered by the Claude subscription; "listCost" is what the same tokens
@@ -266,6 +270,7 @@ pub fn generate(t: &Path, course: &str, mode: Mode, model: &str, effort: &str, l
         slides.insert(0, out["replace_last"].clone());
     }
     normalize(&mut slides);
+    let drawings = crate::svg::check_slides(&mut slides, &mut |a| crate::svg::fix_with_claude(a, model, "low"))?;
     let flagged = fact_check(&mut slides, &transcript, course, &crate::material::words(&docs));
     let code = Some(lang).filter(|l| lang_name(l).is_some()).or(out["language"].as_str()).unwrap_or("").to_lowercase();
     attach_refs(&mut slides, &docs, &seen, &code);
@@ -289,6 +294,7 @@ pub fn generate(t: &Path, course: &str, mode: Mode, model: &str, effort: &str, l
         "flagged": flagged,
         "lookups": lookups,
         "usage": usage,
+        "drawings": { "fixed": drawings.0, "dropped": drawings.1 },
     }));
     save(t, &deck, &title)?;
     let (nc, nt) = if review {
@@ -303,6 +309,7 @@ pub fn generate(t: &Path, course: &str, mode: Mode, model: &str, effort: &str, l
     st["replaced"] = json!(replace);
     st["rebuilt"] = json!(rebuild);
     st["reviewed"] = json!(review);
+    st["drawings"] = json!({ "fixed": drawings.0, "dropped": drawings.1 });
     Ok(st)
 }
 
@@ -315,7 +322,7 @@ pub(crate) fn model_effort<'a>(model: &'a str, effort: &'a str) -> (&'a str, &'a
 fn system_prompt(course: &str, lang: &str, docs: &[crate::material::Doc], style: &Value) -> String {
     let course_name = if course.trim().is_empty() { String::new() } else { format!(" of the course \"{}\"", course.trim()) };
     let language = lang_name(lang).unwrap_or("the language the lecture is given in");
-    let mut system = PROMPT.replace("{course}", &course_name).replace("{language}", language);
+    let mut system = PROMPT.replace("{course}", &course_name).replace("{language}", language).replace("{svg}", &crate::svg::rules(crate::svg::SLIDE_SIZE));
     if !docs.is_empty() {
         system.push('\n');
         system.push_str(PROMPT_MATERIAL);
@@ -461,6 +468,7 @@ pub fn sample(dir: &Path, builtin: bool, course: &str, model: &str, effort: &str
         return Err("Claude Code returned no slides.".into());
     }
     normalize(&mut slides);
+    crate::svg::check_slides(&mut slides, &mut |a| crate::svg::fix_with_claude(a, model, "low"))?;
     fact_check(&mut slides, &transcript, course, &Default::default());
     let mut ev = json!({ "type": "styleSample", "slides": slides, "source": label, "usage": usage_summary(&run.usage),
         "lang": Some(lang).filter(|l| lang_name(l).is_some()).or(out["language"].as_str()).unwrap_or("") });
@@ -579,6 +587,11 @@ pub fn in_job<T>(kind: &str, f: impl FnOnce() -> T) -> T {
     let r = f();
     JOB.with(|j| *j.borrow_mut() = None);
     r
+}
+
+/// Whether the job running on this thread was stopped.
+pub fn stopped() -> bool {
+    JOB.with(|j| j.borrow().clone()).is_some_and(|k| cancelled(&k))
 }
 
 /// Whether the job `kind` was stopped (its helpers check before starting more work).
@@ -1164,6 +1177,13 @@ mod tests {
 
     /// Every block type the prompt allows, including plain-string list items and a stray
     /// string block, must go through the fact check without panicking.
+    #[test]
+    fn system_prompt_has_the_svg_rules_for_slides() {
+        let s = system_prompt("", "en", &[], &json!({}));
+        assert!(s.contains("{\"type\":\"svg\"") && s.contains("SVG DRAWINGS") && s.contains("540 in a column"));
+        assert!(!s.contains("{svg}") && !s.contains("{size}"));
+    }
+
     #[test]
     fn style_rules_default_to_nothing() {
         assert_eq!(style_rules(&json!({})), "");

@@ -550,6 +550,172 @@
     return `<div class="pr-term s-code"><div class="bar"><span>${esc(plain(b.caption || b.file || ""))}</span><span>${esc(b.lang || "python")}</span></div><pre>${lines.join("\n")}</pre></div>`;
   };
 
+  // ---- "svg": a drawing Claude wrote as SVG (svg_prompt.txt). Only drawing survives sanitizeSvg:
+  // SVG elements and attributes from an allowlist; no scripts, event attributes, foreignObject,
+  // images, links or url()s leaving the drawing. Inline SVG shares the page's ids and styles, so
+  // its ids, keyframes and <style> rules are renamed and scoped to this one drawing. Elements with
+  // data-step="n" are builds: revealed on the n-th click when presenting (setSlideStep).
+  const SVG_NS = "http://www.w3.org/2000/svg", XLINK_NS = "http://www.w3.org/1999/xlink";
+  const SVG_TAGS = new Set(("svg g defs symbol use title desc rect circle ellipse line polyline polygon path text tspan textPath marker " +
+    "linearGradient radialGradient stop pattern clipPath mask style animate animateTransform animateMotion mpath set filter feBlend " +
+    "feColorMatrix feComponentTransfer feFuncA feFuncR feFuncG feFuncB feComposite feDropShadow feFlood feGaussianBlur feMerge " +
+    "feMergeNode feMorphology feOffset feTile feTurbulence feDisplacementMap").split(" "));
+  // A url() that isn't "#id", a script or data URL, an import: anything that leaves the drawing.
+  const SVG_BAD = /url\(\s*(?!['"]?\s*#)|javascript:|vbscript:|data:|@import|expression\(/i;
+  // Declarations that could move the drawing (or anything) out of its box.
+  const SVG_BAD_PROP = /^(position|top|left|right|bottom|inset.*|z-index|content|behavior|-moz-binding)$/i;
+  const SVG_MAX = 100000;
+  let svgN = 0;
+  function sanitizeSvg(src, label) {
+    let s = String(src ?? "").trim().replace(/&nbsp;/g, "&#160;");
+    if (!s) return { err: "The drawing is empty." };
+    if (s.length > SVG_MAX) return { err: `The SVG is too long (${s.length} characters, at most ${SVG_MAX}).` };
+    // Lenient about the namespaces a model forgets.
+    s = s.replace(/^<svg\b([^>]*)>/, (m, at) => "<svg" + (/\sxmlns=/.test(at) ? "" : ` xmlns="${SVG_NS}"`) + (/xlink:/.test(s) && !/\sxmlns:xlink=/.test(at) ? ` xmlns:xlink="${XLINK_NS}"` : "") + at + ">");
+    const doc = new DOMParser().parseFromString(s, "image/svg+xml");
+    const pe = doc.getElementsByTagName("parsererror")[0];
+    if (pe) return { err: "It isn't valid SVG: " + (pe.textContent || "").split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 2).join(" ").slice(0, 240) };
+    const root = doc.documentElement;
+    if (root.namespaceURI !== SVG_NS || root.localName !== "svg") return { err: "It must be one <svg> element." };
+    let vb = (root.getAttribute("viewBox") || "").trim().split(/[\s,]+/).map(Number);
+    if (vb.length !== 4 || !vb.every(Number.isFinite) || !(vb[2] > 0 && vb[3] > 0)) {
+      const w = parseFloat(root.getAttribute("width")), h = parseFloat(root.getAttribute("height"));
+      if (!(w > 0 && h > 0)) return { err: 'The <svg> needs a viewBox, e.g. viewBox="0 0 540 320".' };
+      vb = [0, 0, w, h];
+    }
+    const scope = "s" + ++svgN, ids = new Map(), kf = new Map();
+    for (const el of [...root.querySelectorAll("*")]) {
+      if (!el.isConnected) continue; // inside one removed already
+      if (el.namespaceURI !== SVG_NS || !SVG_TAGS.has(el.localName)) { el.remove(); continue; }
+      // SMIL that would set a link or a handler.
+      if (/^(animate|set)$/.test(el.localName) && /^((xlink:)?href|on.*)$/i.test((el.getAttribute("attributeName") || "").trim())) { el.remove(); continue; }
+      // Text only: HTML re-parses <title>/<desc> content as HTML.
+      if (/^(title|desc)$/.test(el.localName)) el.textContent = [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.data).join("");
+    }
+    const els = [root, ...root.querySelectorAll("*")];
+    els.forEach((el) => { if (el.id) ids.set(el.id, `${el.id}-${scope}`); });
+    const sheetOf = (text) => {
+      if (typeof CSSStyleSheet !== "function") return null;
+      try { const sh = new CSSStyleSheet(); sh.replaceSync(text); return sh; } catch (e) { return null; }
+    };
+    const styles = els.filter((el) => el.localName === "style").map((el) => [el, sheetOf(el.textContent)]);
+    const keyframes = (list) => { for (const r of list) { if (r.type === 7) kf.set(r.name, `${r.name}-${scope}`); else if (r.cssRules) keyframes(r.cssRules); } };
+    styles.forEach(([, sh]) => sh && keyframes(sh.cssRules));
+    const urls = (v) => v.replace(/url\(\s*(['"]?)\s*#([^'")\s]+)\s*\1\s*\)/g, (m, q, id) => (ids.has(id) ? `url(#${ids.get(id)})` : "none"));
+    const decls = (d) => {
+      let out = "";
+      for (let i = 0; i < d.length; i++) {
+        const p = d[i];
+        let v = d.getPropertyValue(p);
+        if (SVG_BAD_PROP.test(p) || SVG_BAD.test(v)) continue;
+        if (/^animation(-name)?$/.test(p)) v = v.replace(/[A-Za-z_][\w-]*/g, (w) => kf.get(w) || w);
+        out += `${p}: ${urls(v)}; `; // never !important: the drawing can't override the slide's own rules
+      }
+      return out;
+    };
+    const scratch = document.createElementNS(SVG_NS, "g");
+    const inlineStyle = (v) => { scratch.setAttribute("style", v); return decls(scratch.style); };
+    const sel = `svg[data-svg="${scope}"]`;
+    const topSplit = (t) => { const out = []; let d = 0, cur = ""; for (const c of t) { if (c === "(" || c === "[") d++; if (c === ")" || c === "]") d--; if (c === "," && !d) { out.push(cur); cur = ""; } else cur += c; } return out.concat(cur); };
+    const scoped = (selText) => topSplit(selText).map((p) => p.trim()).filter((p) => p && !/^(:root|html|body)\b/i.test(p))
+      .map((p) => (/^svg\b/i.test(p) ? sel + p.slice(3) : `${sel} ${p.replace(/#([A-Za-z_][\w-]*)/g, (m, id) => (ids.has(id) ? "#" + ids.get(id) : m))}`)).join(", ");
+    const rules = (list) => [...list].map((r) => {
+      if (r.type === 1) { const st = scoped(r.selectorText); return st ? `${st} { ${decls(r.style)}}` : ""; }
+      if (r.type === 7) return `@keyframes ${kf.get(r.name)} { ${[...r.cssRules].map((k) => `${k.keyText} { ${decls(k.style)}}`).join(" ")} }`;
+      if (r.type === 4) return `@media ${r.media.mediaText} { ${rules(r.cssRules)} }`;
+      return ""; // @import, @font-face and the rest
+    }).join("\n");
+    for (const [el, sh] of styles) { if (sh) el.textContent = rules(sh.cssRules); else el.remove(); }
+    let steps = 0;
+    for (const el of els) {
+      if (!el.isConnected && el !== root) continue;
+      for (const a of [...el.attributes]) {
+        const n = a.name, v = a.value, ns = a.namespaceURI;
+        if (/^on/i.test(a.localName) || (ns && ns !== XLINK_NS && ns !== "http://www.w3.org/XML/1998/namespace" && ns !== "http://www.w3.org/2000/xmlns/")) { el.removeAttributeNode(a); continue; }
+        if (a.localName === "href") { // only to an element of this drawing
+          const id = v.trim().startsWith("#") && ids.get(v.trim().slice(1));
+          el.removeAttributeNode(a);
+          if (id) el.setAttribute("href", "#" + id);
+          continue;
+        }
+        if (n === "style") { el.setAttribute("style", inlineStyle(v)); continue; }
+        if (SVG_BAD.test(v)) { el.removeAttributeNode(a); continue; }
+        if (n === "id") el.setAttribute("id", ids.get(v));
+        else if (n === "begin" || n === "end") el.setAttribute(n, v.replace(/([A-Za-z_][\w-]*)\.(?=begin|end|click|repeat|mouse)/g, (m, id) => (ids.has(id) ? ids.get(id) + "." : m)));
+        else if (n === "data-step") { const k = Math.round(+v); if (k >= 1 && k <= 20 && el !== root) { el.setAttribute(n, k); steps = Math.max(steps, k); } else el.removeAttribute(n); }
+        else if (/url\(/i.test(v)) el.setAttribute(n, urls(v));
+      }
+      // Math in labels becomes Unicode, as in the other diagrams.
+      if (/^(text|tspan|textPath)$/.test(el.localName))
+        for (const t of el.childNodes) if ((t.nodeType === 3 || t.nodeType === 4) && t.data.includes("$")) t.data = t.data.replace(MATH, (_, m) => texPlain(m));
+    }
+    for (const n of ["width", "height", "x", "y", "style", "class"]) root.removeAttribute(n);
+    root.setAttribute("viewBox", vb.join(" "));
+    root.setAttribute("data-svg", scope);
+    root.setAttribute("role", "img");
+    if (label) root.setAttribute("aria-label", plain(label));
+    root.setAttribute("style", `max-width:${vb[2]}px`);
+    return { html: new XMLSerializer().serializeToString(root), vb, steps };
+  }
+  function svgBlock(b) {
+    const r = sanitizeSvg(b.svg, b.alt);
+    // Can't be drawn: what it shows, in words.
+    if (r.err) return b.alt ? `<p class="body-lg s-p">${inline(b.alt)}</p>` : "";
+    return `<figure class="s-svg">${b.caption ? `<p class="s-cap">${esc(plain(b.caption))}</p>` : ""}${r.html}</figure>`;
+  }
+
+  // What's wrong with a drawing once drawn, for Claude to fix (svg.rs asks the page through
+  // `svgCheck`), as [{text, fatal}]. Fatal: it doesn't draw, a label leaves the viewBox, two
+  // labels overlap, nothing is drawn. Not fatal: text too small at the size it's shown (`width` =
+  // the space it fills, in slide px), literal colours (they break the dark theme). Measured in
+  // viewBox units with animations stopped, i.e. as printed.
+  function checkSvg(src, width) {
+    const r = sanitizeSvg(src);
+    if (r.err) return [{ text: r.err, fatal: true }];
+    const [vx, vy, W, H] = r.vb, out = [], fatal = (text) => out.push({ text, fatal: true }), minor = (text) => out.push({ text, fatal: false });
+    const host = document.createElement("div");
+    host.className = "pr-slide s-measure";
+    host.style.cssText = "position:fixed;left:-40000px;top:0;visibility:hidden;width:auto;height:auto;padding:0";
+    host.innerHTML = `<figure class="s-svg">${r.html}</figure>`;
+    document.body.appendChild(host);
+    try {
+      const svg = host.querySelector("svg");
+      for (const [p, v] of [["width", W + "px"], ["height", H + "px"], ["max-width", "none"], ["max-height", "none"]]) svg.style.setProperty(p, v, "important");
+      svg.pauseAnimations?.();
+      svg.setCurrentTime?.(0);
+      const sr = svg.getBoundingClientRect(), k = W / sr.width;
+      const box = (el) => { const b = el.getBoundingClientRect(); return { x0: vx + (b.left - sr.left) * k, y0: vy + (b.top - sr.top) * k, x1: vx + (b.right - sr.left) * k, y1: vy + (b.bottom - sr.top) * k }; };
+      const name = (t) => `"${t.textContent.trim().replace(/\s+/g, " ").slice(0, 40)}"`;
+      const texts = [...svg.querySelectorAll("text")].filter((t) => !t.closest("defs, clipPath, mask, marker, pattern, symbol") && t.textContent.trim() && t.getBoundingClientRect().width > 0);
+      const boxes = texts.map(box), f = (v) => Math.round(v);
+      texts.forEach((t, i) => {
+        const b = boxes[i];
+        if (b.x0 < vx - 1 || b.y0 < vy - 1 || b.x1 > vx + W + 1 || b.y1 > vy + H + 1)
+          fatal(`The label ${name(t)} goes outside the viewBox (${r.vb.join(" ")}): it spans x ${f(b.x0)}–${f(b.x1)}, y ${f(b.y0)}–${f(b.y1)}.`);
+      });
+      for (let i = 0; i < texts.length; i++)
+        for (let j = i + 1; j < texts.length; j++) {
+          const a = boxes[i], b = boxes[j], w = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), h = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+          if (w <= 0 || h <= 0) continue;
+          const small = Math.min((a.x1 - a.x0) * (a.y1 - a.y0), (b.x1 - b.x0) * (b.y1 - b.y0));
+          if (w * h > 0.15 * small && h > 0.3 * Math.min(a.y1 - a.y0, b.y1 - b.y0))
+            fatal(`The labels ${name(texts[i])} and ${name(texts[j])} overlap (around x ${f((Math.max(a.x0, b.x0) + Math.min(a.x1, b.x1)) / 2)}, y ${f((Math.max(a.y0, b.y0) + Math.min(a.y1, b.y1)) / 2)}).`);
+        }
+      const scale = Math.min(1, (width || W) / W, 400 / H);
+      const tiny = texts.map((t) => [t, parseFloat(getComputedStyle(t).fontSize) * scale]).filter(([, px]) => px < 12).sort((a, b) => a[1] - b[1])[0];
+      if (tiny) minor(`The label ${name(tiny[0])} shows at ${tiny[1].toFixed(1)}px: the viewBox (${W}×${H}) is drawn ${f(W * scale)}px wide here, so use a viewBox the size of its space (${width || W} wide, at most 400 high) and a font-size of at least 13.`);
+      const COLOR = ["fill", "stroke", "stop-color", "flood-color", "lighting-color", "color"], lit = new Set();
+      const literal = (v) => { v = String(v || "").trim(); if (v && !/^(none|transparent|currentcolor|inherit|initial|unset|context-fill|context-stroke)$/i.test(v) && !/^(var|url)\(/i.test(v)) lit.add(v); };
+      for (const el of svg.querySelectorAll("*")) for (const p of COLOR) { literal(el.getAttribute(p)); literal(el.style?.getPropertyValue(p)); }
+      const sheetColors = (list) => { for (const rl of list) { if (rl.style) COLOR.forEach((p) => literal(rl.style.getPropertyValue(p))); if (rl.cssRules) sheetColors(rl.cssRules); } };
+      for (const st of svg.querySelectorAll("style")) if (st.sheet) sheetColors(st.sheet.cssRules);
+      if (lit.size) minor(`It uses literal colours (${[...lit].slice(0, 6).join(", ")}), which break the dark theme: use the theme's variables, e.g. style="fill:var(--card);stroke:var(--foreground)".`);
+      const bb = svg.getBBox();
+      if (!(bb.width > 0 || bb.height > 0)) fatal("Nothing is drawn.");
+    } finally { host.remove(); }
+    return out.filter((p, i) => out.findIndex((q) => q.text === p.text) === i).slice(0, 12);
+  }
+
   const B = {
     p: (b) => `<p class="body-lg s-p">${inline(b.text)}</p>`,
     list: (b) =>
@@ -619,6 +785,7 @@
           (i < nodes.length - 1 ? `<div class="s-link"><span>${esc(plain(links[i] || ""))}</span></div>` : "")).join("")}</div></div>`;
     },
     graph,
+    svg: svgBlock,
     sketch,
     timeline,
     arch,
@@ -659,6 +826,23 @@
   window.renderTex = tex;
   // Speaker notes: same inline markup as the slides ($math$, `code`, **bold**, "(?)"). Escapes HTML.
   window.renderNotes = inline;
+  window.checkSvg = checkSvg;
+  // Why an SVG can't be drawn at all ("" if it can), for the Docs editor.
+  window.svgError = (src) => sanitizeSvg(src).err || "";
+  // The app asks (`svgCheck` event) what's wrong with drawings Claude just made; see checkSvg.
+  window.svgCheckReply = (e) => {
+    const problems = (e.items || []).map((it) => { try { return checkSvg(it.svg, it.width); } catch (x) { return []; } });
+    window.ipc.postMessage(JSON.stringify({ cmd: "svgChecked", id: e.id, problems }));
+  };
+
+  // Builds: how many steps a rendered slide has, and showing it at step k (0 = before the first
+  // click). Outside presenting, slides are never stepped, so they show every step.
+  window.slideSteps = (root) => Math.max(0, ...[...root.querySelectorAll(".s-svg [data-step]")].map((e) => +e.dataset.step || 0));
+  window.setSlideStep = (root, k) => root.querySelectorAll(".s-svg [data-step]").forEach((e) => {
+    const was = e.classList.contains("s-later"), later = +e.dataset.step > k;
+    e.classList.toggle("s-later", later);
+    if (was && !later) e.getAnimations?.({ subtree: true }).forEach((a) => { a.currentTime = 0; a.play(); }); // its motion starts as it appears
+  });
 
   // Clicking a review card shows its answer (and doesn't open the slide).
   document.addEventListener("click", (e) => {
@@ -668,6 +852,8 @@
 
   // If a slide's content runs into the footer, tighten it (two steps) until it fits.
   window.fitSlideText = (root) => {
+    // Reduced motion: SMIL in drawings stays on its first frame (CSS animations: slides.css).
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) (root || document).querySelectorAll(".s-svg svg").forEach((s) => s.pauseAnimations?.());
     (root || document).querySelectorAll(".pr-slide").forEach((el) => {
       const body = el.querySelector(".pr-body"), foot = el.querySelector(".pr-foot");
       if (!body || !foot) return;

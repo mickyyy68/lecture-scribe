@@ -38,6 +38,7 @@ VARIETY AND LAYOUT
   · change over time, waves, generations of models, phases of a process → "timeline"
   · architecture of a network (layers, sizes, encoder/decoder, bottleneck, latent space) → "arch"
   · algorithm described step by step → "algo"; Python code dictated or shown → "code"
+  · something to draw that none of these fits (a geometric construction, a figure drawn on the board, an annotated mechanism, a process best shown moving) → "svg"
   · procedure, causes/consequences, properties → "list"
 - Layout "two" (two columns, ~540px): on the left a "list" (or "def"), on the right ONE block among diagram, terminal, definition, quote, notice.
 - Layout "one" (one column, ~1120px): for a table, a header, a sequence with 3 hosts or more than 3 messages, a topology with more than 3 nodes. Use it when the diagram is the content.
@@ -88,9 +89,12 @@ Blocks:
 - {"type":"arch","caption":str optional,"layers":[{"name":str,"size":str optional,"kind":"in"|"layer"|"latent"|"out","w":0-1 optional,"on":bool optional},...],"groups":[{"from":i,"to":j,"label":str},...] optional}  — layers left to right, max 10; "name" short (≤ 10 characters, e.g. "x", "z", "conv1"); "size" only if said (e.g. "784"); "w" = relative width of the layer if the size isn't said (e.g. 1 for the input, 0.3 for the bottleneck); "groups" for "Encoder"/"Decoder" (1-2 word labels)
 - {"type":"algo","title":str,"lines":[str,...],"hl":[indices]}  — pseudocode, max 14 lines, in the professor's language or English as the professor does; indent 2 spaces per level; keywords at the start of the line (for each, while, if, else, return, repeat, or their equivalents in the slides' language); may use $…$
 - {"type":"code","lang":"python","caption":str optional,"lines":[str,...],"hl":[indices]}  — code, max 14 lines, only what was dictated or shown
+- {"type":"svg","alt":str,"caption":str optional,"svg":str}  — a drawing you write in SVG (rules in SVG DRAWINGS below); "alt": one sentence saying what it shows (shown instead if the drawing can't be); write the SVG's attributes in single quotes, so the JSON string needs no escaping
 - {"type":"aside","tag":str optional,"text":str}  — anecdote or remark by the professor, 1-2 sentences; "tag" defaults to "Aside" in the slides' language
 - {"type":"quote","text":str}  — a sentence of the professor's, quoted word for word
 - {"type":"check","text":str}  — only for a passage that can't be understood
+
+{svg}
 
 REVIEW CARDS (only when the request says REVIEW)
 - Make 2-4 slides {"kind":"review","eyebrow":"Review","title":str,"cards":[{"q":str,"a":str,"from":"hh:mm:ss"},...]}, with 3 cards each: 6-12 questions in all, in lecture order. "eyebrow" in the slides' language.

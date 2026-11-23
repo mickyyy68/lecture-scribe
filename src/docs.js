@@ -5,7 +5,7 @@
    The editor is one contenteditable (#docBody). Its children are the blocks:
      <p> <h1–3> <blockquote> <pre data-lang>   text blocks
      <div class="li" data-k="ul|ol|todo" data-in="0–4" [data-done]>   list items, flat like Notion
-     <hr> <figure data-src> <div class="mathb" data-tex> <div class="chartb" data-src> <div class="tbl">
+     <hr> <figure data-src> <div class="mathb" data-tex> <div class="chartb" data-src [data-lang=svg]> <div class="tbl">
                                               atomic blocks (contenteditable=false; table cells
                                               and captions are editable inside)
    Inline: <b> <i> <s> <code> <a href>, time links <a class="tl" href="#t=hh:mm:ss"> and
@@ -92,16 +92,24 @@ const Docs = (() => {
     return `<div class="tbl" contenteditable="false"><table><thead>${tr(rows[0], "th")}</thead><tbody>${rows.slice(1).map((r) => tr(r, "td")).join("")}</tbody></table>${TBL_TOOLS}</div>`;
   }
   const mathHtml = (tex) => `<div class="mathb" contenteditable="false" data-tex="${esc(tex)}">${tex.trim() ? texHtml(tex, true) : `<span class="hint-empty">Empty formula. Click to write it in LaTeX</span>`}</div>`;
-  function chartInner(src) {
+  // A chart (```chart: one slide diagram block as JSON) or a drawing (```svg: one <svg> element,
+  // drawn like the slides' "svg" block, so sanitised the same way).
+  function chartInner(src, lang) {
     let b;
-    try { b = JSON.parse(src); } catch (e) { return { err: "The chart isn't valid JSON: " + e.message }; }
-    if (!b || !CHARTS.includes(b.type)) return { err: `A chart is one diagram block of type ${CHARTS.join(", ")}.` };
+    if (lang === "svg") {
+      const err = window.svgError(src);
+      if (err) return { err };
+      b = { type: "svg", svg: src };
+    } else {
+      try { b = JSON.parse(src); } catch (e) { return { err: "The chart isn't valid JSON: " + e.message }; }
+      if (!b || !CHARTS.includes(b.type)) return { err: `A chart is one diagram block of type ${CHARTS.join(", ")}.` };
+    }
     try { return { html: `<div class="cw"><div class="pr-slide dchart">${window.renderBlocks([b])}</div></div>` }; } catch (e) { return { err: "The chart couldn't be drawn: " + e.message }; }
   }
   const CHARTS = ["seq", "net", "graph", "plot", "bars", "sketch", "timeline", "arch", "stack", "header"];
-  function chartHtml(src) {
-    const r = chartInner(src);
-    return `<div class="chartb" contenteditable="false" data-src="${esc(src)}">${r.html || `<div class="cerr">${esc(r.err)}</div>`}</div>`;
+  function chartHtml(src, lang) {
+    const r = chartInner(src, lang);
+    return `<div class="chartb" contenteditable="false" data-src="${esc(src)}"${lang === "svg" ? ' data-lang="svg"' : ""}>${r.html || `<div class="cerr">${esc(r.err)}</div>`}</div>`;
   }
   const figHtml = (src, alt) => `<figure contenteditable="false" data-src="${esc(src)}"><img src="${esc(images[src] || "")}" alt=""><figcaption contenteditable="true">${esc(alt)}</figcaption></figure>`;
   const codeHtml = (code, lang) => `<pre data-lang="${esc(lang)}">${esc(code)}\n</pre>`;
@@ -116,7 +124,7 @@ const Docs = (() => {
         const buf = []; i++;
         while (i < L.length && !L[i].trim().startsWith(m[1])) buf.push(L[i++]);
         i++;
-        out.push(m[2] === "chart" ? chartHtml(buf.join("\n")) : codeHtml(buf.join("\n"), m[2])); continue;
+        out.push(m[2] === "chart" || m[2] === "svg" ? chartHtml(buf.join("\n"), m[2]) : codeHtml(buf.join("\n"), m[2])); continue;
       }
       if ((m = /^\s*\$\$(.*)$/.exec(line))) {
         const first = m[1]; let tex;
@@ -209,7 +217,7 @@ const Docs = (() => {
         }
         case "hr": s = "---"; break;
         case "math": s = "$$\n" + b.dataset.tex + "\n$$"; break;
-        case "chart": s = "```chart\n" + b.dataset.src + "\n```"; break;
+        case "chart": s = "```" + (b.dataset.lang || "chart") + "\n" + b.dataset.src + "\n```"; break;
         case "figure": if (b.dataset.src) s = `![${escMd(b.querySelector("figcaption")?.textContent || "").replace(/\n/g, " ").trim()}](${b.dataset.src})`; break;
         case "table": {
           const rows = [...b.querySelectorAll("tr")].map((tr) => [...tr.children].map((c) => mdIn(c).replace(/\s+/g, " ").replace(/\|/g, "\\|").trim()));
@@ -545,7 +553,7 @@ const Docs = (() => {
     ["Text", "p", "Plain text"], ["Heading 1", "h1", "Big section heading"], ["Heading 2", "h2", "Section heading"], ["Heading 3", "h3", "Sub-heading"],
     ["Bulleted list", "ul", "- "], ["Numbered list", "ol", "1. "], ["Checklist", "todo", "[] "], ["Quote", "blockquote", "> "],
     ["Code", "code", "```"], ["Formula", "math", "LaTeX, $$"], ["Table", "table", "Rows and columns"], ["Image", "image", "From a file, or paste one"],
-    ["Chart", "chart", "A diagram, as in the slides"], ["Divider", "hr", "---"], ["Time link", "time", "A moment of the lecture"],
+    ["Chart", "chart", "A diagram, as in the slides"], ["Drawing", "svg", "Anything, drawn in SVG"], ["Divider", "hr", "---"], ["Time link", "time", "A moment of the lecture"],
   ];
   function openSlash() {
     const s = getSelection(), b = blockOf(s.anchorNode);
@@ -604,12 +612,22 @@ const Docs = (() => {
       case "table": { const t = placeAtomic(b, fromHtml(tableHtml([["", ""], ["", ""], ["", ""]]))); caretIn(t.querySelector("th")); break; }
       case "math": changed(); return editAtomic(placeAtomic(b, fromHtml(mathHtml(""))));
       case "chart": changed(); return editAtomic(placeAtomic(b, fromHtml(chartHtml(CHART_SAMPLE))));
+      case "svg": changed(); return editAtomic(placeAtomic(b, fromHtml(chartHtml(SVG_SAMPLE, "svg"))));
       case "image": { const id = ++imgId; pending[id] = { at: b, blank }; send("docPickImage", { path: lect, doc, id }); break; }
       case "time": changed(); return timePop();
     }
     changed();
   }
   const CHART_SAMPLE = JSON.stringify({ type: "bars", caption: "Title", items: [{ label: "A", value: 3 }, { label: "B", value: 5 }] }, null, 2);
+  const SVG_SAMPLE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 200">
+  <rect x="40" y="60" width="200" height="80" style="fill:var(--card);stroke:var(--foreground)"/>
+  <text x="140" y="106" text-anchor="middle">A</text>
+  <g data-step="1">
+    <line x1="240" y1="100" x2="470" y2="100" style="stroke:var(--diagram-link);stroke-width:2"/>
+    <rect x="480" y="60" width="200" height="80" style="fill:var(--primary)"/>
+    <text x="580" y="106" text-anchor="middle" style="fill:var(--primary-foreground)">B</text>
+  </g>
+</svg>`;
 
   let popDone = null;
   // A small box under `rc` to edit a value: formula, chart JSON, link or time.
@@ -642,14 +660,21 @@ const Docs = (() => {
   }
   function closePop(ok) { if (popDone) popDone(ok); }
   function editAtomic(el) {
-    const math = el.classList.contains("mathb");
+    const math = el.classList.contains("mathb"), lang = el.dataset.lang;
     unselect();
     openPop(el.getBoundingClientRect(), math
       ? { label: "Formula (LaTeX)", value: el.dataset.tex, area: true, mono: true, placeholder: "\\frac{1}{n} \\sum_i x_i", preview: (v) => v.trim() && texHtml(v, true),
           onDone: (v) => { checkpoint(); const n = fromHtml(mathHtml(v.trim())); el.replaceWith(n); after(n); }, onDelete: () => removeAtomic(el) }
-      : { label: "Chart: one diagram block as JSON, in the slides' format (bars, plot, graph, seq, net, sketch, timeline, arch, stack, header)", value: el.dataset.src, area: true, mono: true,
-          preview: (v) => { const r = chartInner(v); return r.err ? `<p class="dp-err">${esc(r.err)}</p>` : `<div class="dp-chart">${r.html}</div>`; },
-          onDone: (v) => { checkpoint(); const n = fromHtml(chartHtml(v.trim())); el.replaceWith(n); after(n); requestAnimationFrame(fitCharts); }, onDelete: () => removeAtomic(el) });
+      : { label: lang === "svg" ? "Drawing: one <svg> element with a viewBox about 720 wide. Colours from the theme, e.g. style=\"fill:var(--card)\"; data-step=\"1\", \"2\"… on a group reveals it on that click when presenting"
+            : "Chart: one diagram block as JSON, in the slides' format (bars, plot, graph, seq, net, sketch, timeline, arch, stack, header)", value: el.dataset.src, area: true, mono: true,
+          preview: (v) => {
+            const r = chartInner(v, lang);
+            if (r.err) return `<p class="dp-err">${esc(r.err)}</p>`;
+            // A drawing that draws can still be wrong: labels outside or on top of each other, literal colours.
+            const warn = lang === "svg" ? window.checkSvg(v, 720) : [];
+            return `<div class="dp-chart">${r.html}</div>${warn.map((w) => `<p class="dp-err">${esc(w.text)}</p>`).join("")}`;
+          },
+          onDone: (v) => { checkpoint(); const n = fromHtml(chartHtml(v.trim(), lang)); el.replaceWith(n); after(n); requestAnimationFrame(fitCharts); }, onDelete: () => removeAtomic(el) });
     if (!math) requestAnimationFrame(() => { const c = $("dpop").querySelector(".dp-chart"); fitPreview(c); $("dpop").querySelector(".dp-in").addEventListener("input", () => requestAnimationFrame(() => fitPreview($("dpop").querySelector(".dp-chart")))); });
     function after(n) { const nx = n.nextElementSibling; if (nx && isText(nx)) caretIn(nx, 0, false); changed(); }
   }
@@ -834,7 +859,8 @@ const Docs = (() => {
     $("dslash").addEventListener("click", (e) => { const d = e.target.closest(".ds-i"); if (d && slash) choose(slash.items[+d.dataset.i][1]); });
     addEventListener("mousedown", (e) => { if (popDone && !$("dpop").contains(e.target)) closePop(true); }, true);
     $("docScroll").addEventListener("scroll", () => { $("dtool").style.display = "none"; if (slash) renderSlash(); });
-    new ResizeObserver(() => fitCharts()).observe(body);
+    // Next frame: fitting a chart changes the body's height, which would loop the observer (an error).
+    new ResizeObserver(() => requestAnimationFrame(fitCharts)).observe(body);
     // A click below the last block puts the caret in it.
     $("docScroll").addEventListener("mousedown", (e) => {
       if (!doc || e.target.closest("#docBody, #docTitle")) return;

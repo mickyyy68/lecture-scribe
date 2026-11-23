@@ -191,7 +191,8 @@
     async __run(i) {
       if (i < 0) return JSON.stringify(tests.map((t) => t.name));
       try {
-        await T.until(() => window.inited && typeof window.onEngine === "function", "the page to start", 5000);
+        // The app's page, or an exported deck (tests/ui/deck), which has no Rust side.
+        await T.until(() => (window.inited && typeof window.onEngine === "function") || document.getElementById("deck"), "the page to start", 5000);
         let timer;
         await Promise.race([tests[i].fn(), new Promise((_, no) => { timer = setTimeout(() => no(new Error("timed out after 20 s")), 20000); })]);
         clearTimeout(timer);
