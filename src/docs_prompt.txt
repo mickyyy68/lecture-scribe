@@ -26,7 +26,10 @@ When the professor describes something that is better drawn (a message exchange,
 {"type":"seq","hosts":["Client","Server"],"msgs":[{"from":0,"to":1,"label":"SYN"}]}
 ```
 {charts}
+When none of these formats fits what should be drawn, draw it yourself as a fenced block with the language "svg" holding one <svg> element, following SVG DRAWINGS below.
 At most one diagram per section, and only when it adds something the text doesn't show.
+
+{svg}
 
 FORMAT
 Answer ONLY with the Markdown of the notes, nothing before or after it. The first line is "# " followed by a short title for the notes in {language} (2-6 words, the lecture's topic, e.g. "DHCP in the lab"): it becomes the document's name. No table of contents, no closing summary unless the professor gave one.

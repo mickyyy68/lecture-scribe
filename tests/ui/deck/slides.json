@@ -1,0 +1,44 @@
+[
+  {
+    "kind": "content",
+    "eyebrow": "TCP",
+    "title": "Three-way handshake",
+    "layout": "two",
+    "left": [
+      {
+        "type": "list",
+        "items": [
+          "The client sends SYN",
+          "The server answers"
+        ]
+      }
+    ],
+    "right": [
+      {
+        "type": "svg",
+        "alt": "Client and server.",
+        "svg": "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 540 300'>\n  <rect x='20' y='110' width='120' height='70' style='fill:var(--card);stroke:var(--foreground)'/>\n  <text x='80' y='150' text-anchor='middle'>Client</text>\n  <g data-step='1'><line x1='140' y1='145' x2='400' y2='145' style='stroke:var(--diagram-link);stroke-width:2'/><text x='270' y='130' text-anchor='middle'>SYN</text></g>\n  <g data-step='2'><rect x='400' y='110' width='120' height='70' style='fill:var(--primary)'/><text x='460' y='150' text-anchor='middle' style='fill:var(--primary-foreground)'>Server</text></g>\n</svg>"
+      }
+    ],
+    "from": "00:01:00",
+    "to": "00:02:00",
+    "notes": ""
+  },
+  {
+    "kind": "content",
+    "eyebrow": "TCP",
+    "title": "After the handshake",
+    "layout": "one",
+    "left": [
+      {
+        "type": "list",
+        "items": [
+          "Data flows both ways"
+        ]
+      }
+    ],
+    "from": "00:02:00",
+    "to": "00:03:00",
+    "notes": ""
+  }
+]

@@ -46,24 +46,31 @@ document.fonts && document.fonts.ready.then(() => fitSlideText(deck));
 const fit = (fr) => fr.style.setProperty("--k", fr.clientWidth / 1280);
 const fitAll = () => document.querySelectorAll(".fr").forEach(fit);
 new ResizeObserver(fitAll).observe(document.body);
-let cur = -1;
+let cur = -1, step = 0, steps = 0;
 const pr = document.getElementById("present"), pfr = document.getElementById("pfr");
-function show(i) {
+// Presenting: a slide whose drawing has builds (data-step) opens at step 0 and reveals one more
+// on each move forward before going to the next slide; going back to it shows it whole.
+function show(i, whole) {
   cur = Math.max(0, Math.min(n - 1, i));
   pfr.innerHTML = renderSlide(DATA[cur], cur + 1, n, FOOT);
   const k = Math.min(innerWidth / 1280, innerHeight / 720);
   pfr.style.width = 1280 * k + "px"; pfr.style.setProperty("--k", k);
   pr.classList.add("on");
   fitSlideText(pfr);
+  steps = slideSteps(pfr); step = whole ? steps : 0;
+  setSlideStep(pfr, step);
 }
+const forward = () => { if (step < steps) setSlideStep(pfr, ++step); else if (cur < n - 1) show(cur + 1); };
+const back = () => { if (step > 0) setSlideStep(pfr, --step); else if (cur > 0) show(cur - 1, true); };
 deck.addEventListener("click", (e) => { const fr = e.target.closest(".fr"); if (fr) show(+fr.dataset.i); });
-addEventListener("resize", () => cur >= 0 && pr.classList.contains("on") && show(cur));
+pfr.addEventListener("click", forward);
+addEventListener("resize", () => { if (cur >= 0 && pr.classList.contains("on")) { const at = step; show(cur); setSlideStep(pfr, (step = at)); } });
 addEventListener("keydown", (e) => {
   const on = pr.classList.contains("on");
   if (e.key === "p" || e.key === "P") show(cur < 0 ? 0 : cur);
   else if (e.key === "Escape") pr.classList.remove("on");
-  else if (on && ["ArrowRight", "ArrowDown", " ", "PageDown"].includes(e.key)) { e.preventDefault(); show(cur + 1); }
-  else if (on && ["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) { e.preventDefault(); show(cur - 1); }
+  else if (on && ["ArrowRight", "ArrowDown", " ", "PageDown"].includes(e.key)) { e.preventDefault(); forward(); }
+  else if (on && ["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key)) { e.preventDefault(); back(); }
 });
 </script>
 </body>

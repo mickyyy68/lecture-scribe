@@ -239,7 +239,7 @@ fn chart_formats() -> String {
 fn draft_request(lines: &[(String, String)], course: &str, lang: &str, hint: &str, glossary: &Value, material: &str) -> (String, String) {
     let course_name = if course.trim().is_empty() { String::new() } else { format!(" of the course \"{}\"", course.trim()) };
     let language = crate::slides::lang_name(lang).unwrap_or("the language the lecture is given in");
-    let mut system = PROMPT.replace("{course}", &course_name).replace("{language}", language).replace("{charts}", &chart_formats());
+    let mut system = PROMPT.replace("{course}", &course_name).replace("{language}", language).replace("{charts}", &chart_formats()).replace("{svg}", &crate::svg::rules(crate::svg::DOC_SIZE));
     if !material.is_empty() {
         system.push_str(
             "\nCOURSE MATERIAL\nYou have the index of the course PDFs (below) and two tools: \"search_material\" and \"read_page\". \
@@ -295,6 +295,7 @@ pub fn draft(t: &Path, course: &str, model: &str, effort: &str, lang: &str, hint
     }
     let run = crate::slides::run_claude(&system, &user, course, !material.is_empty(), model, effort, true)?;
     let (name, md) = split_draft(&run.content);
+    let md = crate::svg::check_markdown(&md, &mut |a| crate::svg::fix_with_claude(a, model, "low"))?;
     if md.trim().is_empty() {
         return Err("Claude's answer was empty.".into());
     }
@@ -418,6 +419,9 @@ mod tests {
         assert!(system.contains("Italian") && system.contains("\"Networks\""));
         assert!(system.contains("{\"type\":\"seq\"") && system.contains("· {\"shape\":\"cloud\"") && !system.contains("{\"type\":\"list\""), "chart formats");
         assert!(!system.contains("{charts}"));
+        // Drawings: the fenced form with its rules sized for a doc, never the slides' JSON block.
+        assert!(system.contains("language \"svg\"") && system.contains("SVG DRAWINGS") && system.contains("W is 720"));
+        assert!(!system.contains("{\"type\":\"svg\"") && !system.contains("{svg}") && !system.contains("{size}"));
         // The transcript comes first (prompt caching), the student's request after it.
         let (a, b) = (user.find("[00:00:01] hello").unwrap(), user.find("focus on the lab").unwrap());
         assert!(a < b && user.ends_with("lines [00:00:01] to [00:01:00])."));

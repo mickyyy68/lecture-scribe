@@ -61,6 +61,13 @@ $$
 \\theta \\leftarrow \\theta - \\eta \\nabla L
 $$
 
+\`\`\`svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 120">
+  <rect x="20" y="20" width="160" height="80" style="fill:var(--card);stroke:var(--foreground)"/>
+  <g data-step="1"><text x="100" y="66" text-anchor="middle">step</text></g>
+</svg>
+\`\`\`
+
 | Protocol | Port |
 | --- | --- |
 | DNS | \`53\` |
