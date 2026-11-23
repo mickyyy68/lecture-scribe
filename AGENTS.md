@@ -130,7 +130,7 @@ When you fix a bug, add the test that would have caught it, and see it fail befo
 
 Not covered by `verify.sh`, so check by hand (or tell the user it's unchecked):
 - The menu bar (Cmd-C/V/X/A/Z and Find, Find Next, Find Previous come from `main.rs::app_menu`; the page handles ⌘F/⌘G itself, the menu items only send a `menu` event when clicked), microphone capture, and anything else outside the page.
-- Slide rendering: fill `src/deck.html` with sample slides and screenshot it with headless Chrome (`--headless=new --screenshot`). Check light and dark, the default theme and a custom one, and `{{LANG}}` set to `en` and to another language.
+- Slide rendering: write the slides as a JSON list (or take them from a deck's `batches[].slides`), make the deck with `transcribe-lecture --dump-deck slides.json > deck.html`, and screenshot it with headless Chrome (`--headless=new --screenshot`, plus `--force-dark-mode` for dark). Check light and dark, the default theme and a custom one, and `{{LANG}}` set to `en` and to another language.
 
 Headless modes of `target/release/transcribe-lecture`:
 - `--simulate file.wav [--model path.gguf] [--lang it] [--speed N] [--course X] [--continue file.md]` runs the engine on a WAV and writes to a temp dir. With `--continue`, run it on a **copy**.
