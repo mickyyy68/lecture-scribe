@@ -39,7 +39,9 @@
   const viewEv = (type, path = PATH) => ({ type, path, title: "Test Lecture", lines: view(), versions: verInfo() });
   const slidesState = (path = PATH) => ({ type: "slides", path, title: "Test Lecture", lines: lines.length, done: 0, slides: [], lang: "en", usage: null, flagged: 0, lookups: [] });
 
-  addEventListener("error", (e) => errors.push(e.message));
+  // "Script error." with no file or line has come from a ResizeObserver whose callback resizes what
+  // it observes (a loop): defer that work with requestAnimationFrame.
+  addEventListener("error", (e) => errors.push(e.message + (e.filename ? "" : " (no source: a ResizeObserver loop? see prelude.js)")));
   addEventListener("unhandledrejection", (e) => errors.push(String(e.reason)));
   // wry's webview has no native dialogs: confirm() silently returns false, so they must never be used.
   for (const name of ["confirm", "alert", "prompt"]) {
@@ -176,7 +178,12 @@
     async down(x, at) { const p = await point(x, at); await native("down", p); await wait(10); return p; },
     async up(p) { await native("up", p); await wait(40); },
     async type(text) { await native("type", { text }); await wait(40); },
-    async key(key, mods = []) { await native("key", { key, mods }); await wait(40); },
+    async key(key, mods = []) {
+      // These come from the app's menu bar (main.rs app_menu), which the test window doesn't have:
+      // they'd silently do nothing. Select with ⌘⇧ and the arrows instead; paste with T.paste.
+      if (mods.includes("cmd") && /^[acvx]$/i.test(key)) throw new Error(`⌘${key.toUpperCase()} does nothing in the tests (no menu bar): select with T.key("ArrowDown", ["cmd", "shift"]), paste with T.paste`);
+      await native("key", { key, mods }); await wait(40);
+    },
     async shot(name) { return native("shot", { name }); },
     /** A screenshot in the dark theme; the page goes back to light after. */
     async dark(name) { const h = document.documentElement; h.dataset.theme = "dark"; await wait(60); try { return await T.shot(name); } finally { h.dataset.theme = "light"; await wait(30); } },
